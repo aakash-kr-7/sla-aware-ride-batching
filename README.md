@@ -344,4 +344,5 @@ At this point:
 - Minimal Docker Compose setup for local PostgreSQL development with `.env.example`.
 - Flyway migration baseline configured (`V1__init.sql`).
 - Test suite verifies persistence context against real PostgreSQL via Testcontainers without falling back to H2.
+- Minimal GitHub Actions CI workflow configured for automated Java 21 build and test verification.
 
