@@ -24,7 +24,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(BookingController.class)
+import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
+
+@WebMvcTest(controllers = BookingController.class, excludeAutoConfiguration = {SecurityAutoConfiguration.class})
 class BookingControllerTest {
 
     @Autowired
@@ -35,6 +37,12 @@ class BookingControllerTest {
 
     @MockBean
     private BookingService bookingService;
+
+    @MockBean
+    private com.ridebatching.auth.JwtService jwtService;
+
+    @MockBean
+    private com.ridebatching.auth.CustomUserDetailsService userDetailsService;
 
     @Test
     void shouldCreateBooking() throws Exception {

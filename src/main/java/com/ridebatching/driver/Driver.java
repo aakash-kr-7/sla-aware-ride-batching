@@ -95,6 +95,9 @@ public class Driver {
     }
 
     public void assignTrip(UUID tripId) {
+        if (tripId.equals(this.activeTripId)) {
+            return;
+        }
         if (this.status != DriverStatus.AVAILABLE) {
             throw new IllegalStateException("Driver must be AVAILABLE to be assigned a trip");
         }

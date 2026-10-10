@@ -61,6 +61,9 @@ public class Trip {
     public Instant getUpdatedAt() { return updatedAt; }
 
     public void assignTo(UUID driverId) {
+        if (this.status == TripStatus.DISPATCHED && this.driverId != null && this.driverId.equals(driverId)) {
+            return;
+        }
         if (this.status != TripStatus.PLANNED) {
             throw new IllegalStateException("Trip is already assigned or cannot be assigned. Status: " + this.status);
         }
@@ -95,11 +98,18 @@ public class Trip {
     }
 
     public void removeBooking(UUID bookingId) {
+        boolean removed = false;
         List<TripStop> remainingStops = new ArrayList<>();
         for (TripStop stop : this.stops) {
             if (!stop.getBookingId().equals(bookingId)) {
                 remainingStops.add(stop);
+            } else {
+                removed = true;
             }
+        }
+        
+        if (!removed) {
+            return;
         }
         
         if (remainingStops.isEmpty()) {

@@ -46,6 +46,9 @@ public class DriverOffer {
     public Instant getUpdatedAt() { return updatedAt; }
 
     public void accept() {
+        if (this.status == DriverOfferStatus.ACCEPTED) {
+            return;
+        }
         if (this.status != DriverOfferStatus.OFFERED) {
             throw new IllegalStateException("Only OFFERED offers can be accepted");
         }
@@ -54,6 +57,9 @@ public class DriverOffer {
     }
 
     public void reject() {
+        if (this.status == DriverOfferStatus.REJECTED) {
+            return;
+        }
         if (this.status != DriverOfferStatus.OFFERED) {
             throw new IllegalStateException("Only OFFERED offers can be rejected");
         }

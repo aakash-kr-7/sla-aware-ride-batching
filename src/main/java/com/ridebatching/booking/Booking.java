@@ -87,7 +87,10 @@ public class Booking {
     }
 
     public void cancel() {
-        if (this.status == BookingStatus.DROPPED || this.status == BookingStatus.CANCELLED) {
+        if (this.status == BookingStatus.CANCELLED) {
+            return; // Idempotent
+        }
+        if (this.status == BookingStatus.DROPPED) {
             throw new IllegalStateException("Booking cannot be cancelled from status: " + this.status);
         }
         
