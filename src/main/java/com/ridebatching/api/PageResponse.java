@@ -1,4 +1,4 @@
-package com.ridebatching.common.dto;
+package com.ridebatching.api;
 
 import org.springframework.data.domain.Page;
 import java.util.List;

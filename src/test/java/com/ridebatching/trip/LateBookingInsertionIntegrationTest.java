@@ -1,4 +1,6 @@
-package com.ridebatching;
+package com.ridebatching.trip;
+
+import com.ridebatching.AbstractPostgresIntegrationTest;
 
 import com.ridebatching.batching.BatchingService;
 import com.ridebatching.booking.Booking;
@@ -28,7 +30,6 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import com.ridebatching.zone.ServiceableZone;
 import com.ridebatching.zone.ServiceableZoneRepository;
 import org.junit.jupiter.api.BeforeEach;
-import org.springframework.transaction.annotation.Transactional;
 
 @SpringBootTest
 @Testcontainers

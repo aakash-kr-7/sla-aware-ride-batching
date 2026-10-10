@@ -1,6 +1,5 @@
 package com.ridebatching.driver;
 
-import com.ridebatching.geo.DistanceCalculator;
 import com.ridebatching.geo.GeoPoint;
 import org.junit.jupiter.api.Test;
 

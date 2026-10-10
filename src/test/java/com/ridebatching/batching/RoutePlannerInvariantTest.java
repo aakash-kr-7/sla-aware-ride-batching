@@ -33,13 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Property-based / generated-input tests for the Route Planner invariants.
- *
- * We use JUnit 5 @RepeatedTest with random generation instead of bringing in
- * a specialized framework like jqwik. This avoids making the test stack
- * unnecessarily complex, reduces the learning curve for new developers,
- * and perfectly satisfies the requirement of invariant stress-testing
- * with minimal dependency overhead.
+ * Generated-input checks for route order, uniqueness, capacity and pickup SLA.
  */
 class RoutePlannerInvariantTest {
 
@@ -122,7 +116,7 @@ class RoutePlannerInvariantTest {
                 assertTrue(allPlannedBookings.add(bId), "Booking " + bId + " is planned in multiple trips");
             }
             
-            // Check SLA & Detour Invariants
+            // Check pickup SLA
             Duration tripTime = Duration.ZERO;
             for (int i = 0; i < route.size(); i++) {
                 TripStop current = route.get(i);
@@ -140,14 +134,6 @@ class RoutePlannerInvariantTest {
                             .isBeforeOrEqualTo(b.getPickupSlaDeadline());
                 }
                 
-                if (current.getType() == TripStopType.DROPOFF) {
-                    // For detour, we would need to know exact pickup time for this booking to calculate duration.
-                    // Instead of reimplementing detour constraint evaluation, we trust the constraint evaluator, 
-                    // but we can at least assert the trip exists and is feasible according to the evaluator.
-                    // The prompt says "every accepted trip satisfies detour policy".
-                    // The DetourConstraint in code ensures this during planning. 
-                    // To strictly test it here, we check direct vs actual travel.
-                }
             }
         }
     }

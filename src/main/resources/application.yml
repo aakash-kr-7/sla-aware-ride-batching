@@ -4,7 +4,7 @@ spring:
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:ride_batching}
     username: ${DB_USER:postgres}
-    password: ${DB_PASSWORD:postgres}
+    password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
@@ -19,7 +19,7 @@ spring:
     baseline-on-migrate: true
 
 server:
-  port: 8080
+  port: ${SERVER_PORT:8080}
 
 management:
   endpoints:
@@ -32,15 +32,32 @@ management:
         enabled: true
       show-details: when_authorized
 
+logging:
+  pattern:
+    level: "%5p [correlationId=%X{correlationId}]"
+
 app:
   security:
     jwt:
-      secret: ${JWT_SECRET:default-insecure-secret-do-not-use-in-production-1234567890}
+      secret: ${JWT_SECRET}
       expiration-ms: 3600000
   batching:
     window-duration-minutes: 15
     max-bearing-angle-diff-degrees: 45
+    max-relative-detour-ratio: 1.0
+    max-absolute-detour-minutes: 30
+    scheduling:
+      enabled: false
+      interval-ms: 5000
+  fleet:
+    default-vehicle-capacity: 4
   sla:
     pickup-sla-minutes: 20
   geo:
-    dedup-coordinate-precision: 4
+    circuity-factor: 1.35
+    average-speed-kmh: 30.0
+    stop-dwell-time-seconds: 120
+
+dispatch:
+  cool-off:
+    duration: PT5M

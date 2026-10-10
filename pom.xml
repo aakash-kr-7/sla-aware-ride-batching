@@ -155,6 +155,8 @@
                 </dependency>
             </dependencies>
             <build>
+                <!-- Keep generated JMH *Test classes out of normal JUnit discovery. -->
+                <directory>${project.basedir}/target/benchmark</directory>
                 <plugins>
                     <plugin>
                         <groupId>org.codehaus.mojo</groupId>

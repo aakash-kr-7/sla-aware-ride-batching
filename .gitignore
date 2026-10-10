@@ -1,7 +1,4 @@
-target/
-!.mvn/wrapper/maven-wrapper.jar
-!**/src/main/**/target/
-!**/src/test/**/target/
+/target/
 
 ### IDE ###
 .idea/
@@ -13,5 +10,16 @@ target/
 *.log
 
 ### Environment & Secrets ###
-.env
+.env*
 !.env.example
+*.pem
+*.key
+*.p12
+*.jks
+
+### Local artifacts ###
+/tmp/
+*.jfr
+hs_err_pid*
+.DS_Store
+Thumbs.db

@@ -7,7 +7,6 @@ import java.util.List;
 
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Caching;
 import com.ridebatching.config.CacheConfig;
 
 @Repository

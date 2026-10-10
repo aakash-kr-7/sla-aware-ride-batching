@@ -1,4 +1,4 @@
-package com.ridebatching.common.api;
+package com.ridebatching.api;
 
 import com.ridebatching.booking.exception.BookingNotFoundException;
 import com.ridebatching.booking.exception.UnserviceableZoneException;

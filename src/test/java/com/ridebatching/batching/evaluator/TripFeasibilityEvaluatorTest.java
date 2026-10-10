@@ -8,7 +8,6 @@ import com.ridebatching.batching.constraint.CapacityConstraint.CapacityRejection
 import com.ridebatching.batching.constraint.DetourConstraint.DetourRejectionDetails;
 import com.ridebatching.batching.constraint.PickupSlaConstraint.PickupSlaRejectionDetails;
 import com.ridebatching.batching.evaluator.TripFeasibilityEvaluator.EvaluationTrace;
-import com.ridebatching.booking.Booking;
 import com.ridebatching.fleet.Vehicle;
 import com.ridebatching.fleet.Capacity;
 import com.ridebatching.geo.GeoPoint;

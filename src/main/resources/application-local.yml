@@ -1,4 +1,11 @@
 # Local development profile
+app:
+  local:
+    admin:
+      enabled: ${LOCAL_ADMIN_ENABLED:false}
+      username: ${LOCAL_ADMIN_USERNAME:}
+      password: ${LOCAL_ADMIN_PASSWORD:}
+
 spring:
   jpa:
     show-sql: true

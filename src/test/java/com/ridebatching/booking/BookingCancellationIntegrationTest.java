@@ -1,11 +1,7 @@
 package com.ridebatching.booking;
 
-import com.ridebatching.booking.dto.BookingRequest;
-import com.ridebatching.booking.dto.BookingResponse;
-import com.ridebatching.booking.dto.GeoPointDto;
 import com.ridebatching.trip.Trip;
 import com.ridebatching.trip.TripRepository;
-import com.ridebatching.trip.TripStatus;
 import com.ridebatching.batching.BatchingService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,8 +14,6 @@ import java.util.UUID;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest

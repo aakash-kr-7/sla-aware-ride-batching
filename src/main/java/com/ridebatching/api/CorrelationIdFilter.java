@@ -1,4 +1,4 @@
-package com.ridebatching.config;
+package com.ridebatching.api;
 
 import jakarta.servlet.Filter;
 import jakarta.servlet.FilterChain;

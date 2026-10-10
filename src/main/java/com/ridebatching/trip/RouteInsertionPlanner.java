@@ -25,8 +25,8 @@ public class RouteInsertionPlanner {
      * Time Complexity: O(N^3) where N is the number of stops in the existing route.
      * There are O(N^2) valid insertion pairs (pickup index, dropoff index).
      * For each pair, we construct a new route and calculate its total travel time in O(N).
-     * Since N (stops) is typically very small (e.g. <= 8 for a 4-seater cab), O(N^3) is 
-     * computationally trivial and preferred for readability. Premature optimization is avoided.
+     * Capacity limits concurrent riders, not total stops when riders turn over.
+     * Route length remains an independent cost; there is currently no explicit stop cap.
      * 
      * Deterministic tie-breaking: If multiple insertion pairs yield the same added cost,
      * the one with the earliest pickup index (and then earliest drop-off index) wins.

@@ -1,7 +1,6 @@
 package com.ridebatching.auth;
 
 import com.ridebatching.AbstractPostgresIntegrationTest;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ridebatching.booking.Booking;
 import com.ridebatching.booking.BookingRepository;
 import com.ridebatching.booking.BookingStatus;

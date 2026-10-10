@@ -19,7 +19,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.CountDownLatch;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class DispatchIntegrationTest extends AbstractPostgresIntegrationTest {
 

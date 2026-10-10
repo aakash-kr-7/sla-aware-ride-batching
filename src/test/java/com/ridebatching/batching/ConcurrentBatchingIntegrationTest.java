@@ -9,7 +9,6 @@ import com.ridebatching.booking.EmployeeRepository;
 import com.ridebatching.geo.GeoPoint;
 import com.ridebatching.trip.Trip;
 import com.ridebatching.trip.TripRepository;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

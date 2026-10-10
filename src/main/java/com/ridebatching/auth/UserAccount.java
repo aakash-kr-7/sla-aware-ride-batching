@@ -11,9 +11,8 @@ import java.time.Instant;
 
 /**
  * Authentication identity is distinct from transport-domain Employee.
- * Employee focuses on the physical person, location, schedule, and trip assignments.
- * UserAccount handles credentials, JWTs, and Spring Security roles.
- * Mixing them violates SRP and mixes security concerns with business logic.
+ * Employee stores transport-domain reference data linked to bookings.
+ * UserAccount stores credentials and Spring Security roles.
  */
 @Entity
 @Table(name = "user_account")

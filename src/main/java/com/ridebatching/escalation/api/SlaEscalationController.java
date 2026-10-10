@@ -19,7 +19,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 @RestController
 @RequestMapping("/api/v1/escalations")
-@Tag(name = "Approver (Escalations)", description = "Endpoints for approvers to view and manage SLA escalations")
+@Tag(name = "Approver (Escalations)", description = "Read access to open SLA escalations")
 public class SlaEscalationController {
 
     private final SlaEscalationRepository escalationRepository;

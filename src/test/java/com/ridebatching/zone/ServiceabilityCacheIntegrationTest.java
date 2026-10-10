@@ -1,7 +1,6 @@
 package com.ridebatching.zone;
 
 import com.ridebatching.AbstractPostgresIntegrationTest;
-import com.ridebatching.config.CacheConfig;
 import com.ridebatching.geo.GeoPoint;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

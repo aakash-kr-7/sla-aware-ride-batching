@@ -1,6 +1,7 @@
 package com.ridebatching.booking.api;
 
 import com.ridebatching.booking.BookingService;
+import com.ridebatching.api.PageResponse;
 import com.ridebatching.booking.dto.BookingRequest;
 import com.ridebatching.booking.dto.BookingResponse;
 import jakarta.validation.Valid;
@@ -58,10 +59,10 @@ public class BookingController {
 
     @GetMapping
     @PreAuthorize("hasRole('ADMIN') or #employeeId == authentication.principal.employeeId")
-    public com.ridebatching.common.dto.PageResponse<BookingResponse> listBookings(
+    public PageResponse<BookingResponse> listBookings(
             @RequestHeader("X-Employee-Id") UUID employeeId,
             Pageable pageable) {
         Page<BookingResponse> page = bookingService.listBookingsByEmployee(employeeId, pageable);
-        return com.ridebatching.common.dto.PageResponse.of(page);
+        return PageResponse.of(page);
     }
 }
