@@ -223,6 +223,7 @@ Accepted
 
 ### Context
 Calling external routing APIs (e.g. Google Distance Matrix, OSRM) introduces network latency, rate limits, external costs, and non-deterministic test failures.
+Using a local, deterministic, and offline estimator via a `TravelTimeEstimator` abstraction ensures fast and reliable algorithmic evaluations and testability. A real production system would likely swap this implementation for one backed by live/road-network ETA data to properly account for traffic and road closures.
 
 ### Decision
 For any two stops $A$ and $B$:
