@@ -288,11 +288,60 @@ Package executable JAR:
 ./mvnw clean package
 ```
 
+## Local Development Environment
+
+### 1. Start Local PostgreSQL
+
+Copy the sample environment file if custom ports or credentials are required:
+
+```bash
+cp .env.example .env
+```
+
+Start the PostgreSQL service in the background:
+
+```bash
+docker compose up -d
+```
+
+Verify that the container is healthy:
+
+```bash
+docker compose ps
+```
+
+### 2. Application Startup
+
+Run the application locally against the local PostgreSQL container (executing Flyway migrations on startup):
+
+```bash
+./mvnw spring-boot:run -Dspring-boot.run.profiles=local
+```
+
+Actuator health endpoints become accessible at `http://localhost:8080/actuator/health`.
+
+### 3. Stop or Reset Database
+
+Stop the container while preserving persisted data:
+
+```bash
+docker compose down
+```
+
+Stop and completely reset the database (wipes all tables and the volume):
+
+```bash
+docker compose down -v
+```
+
 ## Current status
 
-**Stage: Phase 1 — Foundation (Skeleton Initialized)**
+**Stage: Phase 1 — Foundation (Local Environment & Persistence Baseline)**
 
 At this point:
 - Spring Boot 3.3.5 and Java 21 project skeleton initialized.
 - Maven Wrapper configured (`./mvnw` and `mvnw.cmd`).
-- Base application context test verified against PostgreSQL via Testcontainers.
+- Minimal Docker Compose setup for local PostgreSQL development with `.env.example`.
+- Flyway migration baseline configured (`V1__init.sql`).
+- Test suite verifies persistence context against real PostgreSQL via Testcontainers without falling back to H2.
+

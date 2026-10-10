@@ -1,0 +1,2 @@
+-- Initial schema baseline
+-- Domain tables (bookings, serviceable_zones, trips, drivers) will be added in subsequent increments.

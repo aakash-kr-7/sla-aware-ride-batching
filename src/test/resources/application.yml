@@ -1,0 +1,11 @@
+# Test environment configuration
+# Strictly uses PostgreSQL (via Testcontainers @ServiceConnection). H2 is not on the classpath and is never used.
+spring:
+  datasource:
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+    locations: classpath:db/migration

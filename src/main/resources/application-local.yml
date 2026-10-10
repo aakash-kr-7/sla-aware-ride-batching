@@ -1,0 +1,12 @@
+# Local development profile
+spring:
+  jpa:
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+logging:
+  level:
+    com.ridebatching: DEBUG
+    org.flywaydb: INFO
