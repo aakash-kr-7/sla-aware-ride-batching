@@ -18,7 +18,7 @@
     <description>SLA-Aware On-Demand Ride Batching Backend</description>
 
     <properties>
-        <java.version>21</java.version>
+        <java.version>17</java.version>
         <testcontainers.version>1.20.6</testcontainers.version>
     </properties>
 
