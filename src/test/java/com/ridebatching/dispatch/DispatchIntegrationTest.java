@@ -4,14 +4,22 @@ import com.ridebatching.AbstractPostgresIntegrationTest;
 import com.ridebatching.driver.Driver;
 import com.ridebatching.driver.DriverRepository;
 import com.ridebatching.geo.GeoPoint;
+import com.ridebatching.trip.Trip;
+import com.ridebatching.trip.TripRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.CountDownLatch;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class DispatchIntegrationTest extends AbstractPostgresIntegrationTest {
 
@@ -27,6 +35,9 @@ class DispatchIntegrationTest extends AbstractPostgresIntegrationTest {
     @Autowired
     private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private TripRepository tripRepository;
+
     private UUID tripId;
     private GeoPoint pickupLocation;
     private Driver nearDriver;
@@ -35,6 +46,9 @@ class DispatchIntegrationTest extends AbstractPostgresIntegrationTest {
     @BeforeEach
     void setup() {
         tripId = UUID.randomUUID();
+        Trip trip = new Trip(tripId, java.time.Instant.now(), java.time.Instant.now());
+        tripRepository.saveAndFlush(trip);
+
         pickupLocation = new GeoPoint(12.9716, 77.5946);
 
         nearDriver = new Driver(UUID.randomUUID(), "Near Driver", 4);
@@ -105,5 +119,72 @@ class DispatchIntegrationTest extends AbstractPostgresIntegrationTest {
         Optional<DriverOffer> secondOffer = dispatchService.dispatchTrip(tripId, pickupLocation);
         assertThat(secondOffer).isPresent();
         assertThat(secondOffer.get().getDriverId()).isEqualTo(nearDriver.getId()); // Available again!
+    }
+
+    @Test
+    void concurrentAcceptanceOnlyAllowsOneWinner() throws Exception {
+        // Generate two offers for the same trip
+        DriverOffer offer1 = new DriverOffer(UUID.randomUUID(), nearDriver.getId(), tripId);
+        DriverOffer offer2 = new DriverOffer(UUID.randomUUID(), farDriver.getId(), tripId);
+        offerRepository.save(offer1);
+        offerRepository.save(offer2);
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch latch = new CountDownLatch(1);
+
+        Callable<Void> acceptTask1 = () -> {
+            latch.await();
+            dispatchService.acceptOffer(offer1.getId());
+            return null;
+        };
+
+        Callable<Void> acceptTask2 = () -> {
+            latch.await();
+            dispatchService.acceptOffer(offer2.getId());
+            return null;
+        };
+
+        Future<Void> future1 = executor.submit(acceptTask1);
+        Future<Void> future2 = executor.submit(acceptTask2);
+
+        // Fire them simultaneously
+        latch.countDown();
+
+        int successCount = 0;
+        int failureCount = 0;
+
+        try {
+            future1.get();
+            successCount++;
+        } catch (Exception e) {
+            failureCount++;
+            assertThat(e.getCause()).isInstanceOf(IllegalStateException.class);
+        }
+
+        try {
+            future2.get();
+            successCount++;
+        } catch (Exception e) {
+            failureCount++;
+            assertThat(e.getCause()).isInstanceOf(IllegalStateException.class);
+        }
+
+        executor.shutdown();
+
+        assertThat(successCount).isEqualTo(1);
+        assertThat(failureCount).isEqualTo(1);
+
+        // Verify state
+        Trip trip = tripRepository.findById(tripId).orElseThrow();
+        assertThat(trip.getStatus()).isEqualTo(com.ridebatching.trip.TripStatus.DISPATCHED);
+
+        DriverOffer finalOffer1 = offerRepository.findById(offer1.getId()).orElseThrow();
+        DriverOffer finalOffer2 = offerRepository.findById(offer2.getId()).orElseThrow();
+
+        // One offer should be ACCEPTED, the other OFFERED (since acceptance failed)
+        assertThat(
+                (finalOffer1.getStatus() == DriverOfferStatus.ACCEPTED && finalOffer2.getStatus() == DriverOfferStatus.OFFERED) ||
+                (finalOffer2.getStatus() == DriverOfferStatus.ACCEPTED && finalOffer1.getStatus() == DriverOfferStatus.OFFERED)
+        ).isTrue();
     }
 }

@@ -14,9 +14,9 @@ This document tracks the actual state of the repository, reflecting features tha
 | batching               | D        | I           | T      | Greedy heuristics, concurrency safe |
 | SLA                    | D        | I           | T      | Implemented via TripFeasibilityEvaluator |
 | detour                 | D        | I           | T      | Relative and absolute thresholds enforced |
-| driver dispatch        | D        | I           | T      | State machine & basic eligibility (ranking/offers pending) |
+| driver dispatch        | D        | I           | T      | Ranking, offers, and concurrent acceptance |
 | late insertion         | —        | —           | —      | |
-| cancellation           | —        | —           | —      | |
+| cancellation           | D        | I           | T      | Pending booking cancellation; assigned trips throw unsupported |
 | authentication         | —        | —           | —      | |
 | observability          | —        | —           | —      | |
 | caching                | —        | —           | —      | |

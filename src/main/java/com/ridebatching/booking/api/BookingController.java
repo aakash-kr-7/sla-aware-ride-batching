@@ -41,6 +41,13 @@ public class BookingController {
         return bookingService.getBooking(id);
     }
 
+    @org.springframework.web.bind.annotation.DeleteMapping("/{id}")
+    public BookingResponse cancelBooking(
+            @RequestHeader("X-Employee-Id") UUID employeeId,
+            @PathVariable UUID id) {
+        return bookingService.cancelBooking(employeeId, id);
+    }
+
     @GetMapping
     public com.ridebatching.common.dto.PageResponse<BookingResponse> listBookings(
             @RequestHeader("X-Employee-Id") UUID employeeId,

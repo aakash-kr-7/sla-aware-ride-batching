@@ -5,6 +5,8 @@ import com.ridebatching.driver.DriverEligibilityPolicy;
 import com.ridebatching.driver.DriverProximityRanker;
 import com.ridebatching.driver.DriverRepository;
 import com.ridebatching.geo.GeoPoint;
+import com.ridebatching.trip.Trip;
+import com.ridebatching.trip.TripRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,17 +23,20 @@ public class DispatchService {
     private final DriverEligibilityPolicy eligibilityPolicy;
     private final DriverProximityRanker ranker;
     private final RejectionCoolOffPolicy coolOffPolicy;
+    private final TripRepository tripRepository;
 
     public DispatchService(DriverRepository driverRepository,
                            DriverOfferRepository offerRepository,
                            DriverEligibilityPolicy eligibilityPolicy,
                            DriverProximityRanker ranker,
-                           RejectionCoolOffPolicy coolOffPolicy) {
+                           RejectionCoolOffPolicy coolOffPolicy,
+                           TripRepository tripRepository) {
         this.driverRepository = driverRepository;
         this.offerRepository = offerRepository;
         this.eligibilityPolicy = eligibilityPolicy;
         this.ranker = ranker;
         this.coolOffPolicy = coolOffPolicy;
+        this.tripRepository = tripRepository;
     }
 
     @Transactional
@@ -65,5 +70,29 @@ public class DispatchService {
                 .orElseThrow(() -> new IllegalArgumentException("Offer not found"));
         offer.reject();
         offerRepository.save(offer);
+    }
+
+    @Transactional
+    public void acceptOffer(UUID offerId) {
+        DriverOffer offer = offerRepository.findById(offerId)
+                .orElseThrow(() -> new IllegalArgumentException("Offer not found"));
+
+        // Accept the offer first (will throw if not OFFERED)
+        offer.accept();
+        offerRepository.save(offer);
+
+        // Lock the trip to prevent concurrent assignments
+        Trip trip = tripRepository.findByIdForUpdate(offer.getTripId())
+                .orElseThrow(() -> new IllegalArgumentException("Trip not found"));
+
+        // Transition trip state (will throw if already DISPATCHED or not PLANNED)
+        trip.assignTo(offer.getDriverId());
+        tripRepository.save(trip);
+
+        // Assign the driver
+        Driver driver = driverRepository.findById(offer.getDriverId())
+                .orElseThrow(() -> new IllegalArgumentException("Driver not found"));
+        driver.assignTrip(trip.getId());
+        driverRepository.save(driver);
     }
 }

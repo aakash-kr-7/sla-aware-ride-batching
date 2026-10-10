@@ -60,6 +60,15 @@ public class Trip {
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
 
+    public void assignTo(UUID driverId) {
+        if (this.status != TripStatus.PLANNED) {
+            throw new IllegalStateException("Trip is already assigned or cannot be assigned. Status: " + this.status);
+        }
+        this.status = TripStatus.DISPATCHED;
+        this.driverId = driverId;
+        this.updatedAt = Instant.now();
+    }
+
     /**
      * Returns an unmodifiable view of the current stops.
      */

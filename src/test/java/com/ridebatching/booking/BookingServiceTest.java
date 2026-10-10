@@ -21,7 +21,9 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.mock;
 
 @ExtendWith(MockitoExtension.class)
 class BookingServiceTest {
@@ -86,5 +88,56 @@ class BookingServiceTest {
         );
 
         assertThrows(UnserviceableZoneException.class, () -> bookingService.createBooking(employeeId, request));
+    }
+
+    @Test
+    void shouldCancelPendingBookingSuccessfully() {
+        UUID employeeId = UUID.randomUUID();
+        UUID bookingId = UUID.randomUUID();
+        Employee employee = new Employee(employeeId, "EMP-100", "Alice", "alice@example.com");
+        
+        Booking booking = new Booking(bookingId, employee, new GeoPoint(0,0), new GeoPoint(0,0), 
+            java.time.Instant.now(), BookingStatus.PENDING, java.time.Instant.now(), java.time.Instant.now(), "key");
+            
+        when(bookingRepository.findById(bookingId)).thenReturn(Optional.of(booking));
+        when(bookingRepository.save(any(Booking.class))).thenAnswer(i -> i.getArguments()[0]);
+
+        BookingResponse response = bookingService.cancelBooking(employeeId, bookingId);
+
+        assertEquals(BookingStatus.CANCELLED, response.status());
+        verify(bookingRepository).save(booking);
+    }
+
+    @Test
+    void shouldThrowExceptionWhenCancellingAssignedBooking() {
+        UUID employeeId = UUID.randomUUID();
+        UUID bookingId = UUID.randomUUID();
+        Employee employee = new Employee(employeeId, "EMP-100", "Alice", "alice@example.com");
+        
+        Booking booking = new Booking(bookingId, employee, new GeoPoint(0,0), new GeoPoint(0,0), 
+            java.time.Instant.now(), BookingStatus.CONFIRMED, java.time.Instant.now(), java.time.Instant.now(), "key");
+        booking.setTripId(UUID.randomUUID());
+            
+        when(bookingRepository.findById(bookingId)).thenReturn(Optional.of(booking));
+
+        UnsupportedOperationException exception = assertThrows(UnsupportedOperationException.class, 
+            () -> bookingService.cancelBooking(employeeId, bookingId));
+        assertEquals("Trip replanning for cancelled bookings is not yet supported.", exception.getMessage());
+    }
+
+    @Test
+    void shouldThrowExceptionWhenCancellingDroppedBooking() {
+        UUID employeeId = UUID.randomUUID();
+        UUID bookingId = UUID.randomUUID();
+        Employee employee = new Employee(employeeId, "EMP-100", "Alice", "alice@example.com");
+        
+        Booking booking = new Booking(bookingId, employee, new GeoPoint(0,0), new GeoPoint(0,0), 
+            java.time.Instant.now(), BookingStatus.DROPPED, java.time.Instant.now(), java.time.Instant.now(), "key");
+            
+        when(bookingRepository.findById(bookingId)).thenReturn(Optional.of(booking));
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class, 
+            () -> bookingService.cancelBooking(employeeId, bookingId));
+        assertEquals("Booking cannot be cancelled from status: DROPPED", exception.getMessage());
     }
 }

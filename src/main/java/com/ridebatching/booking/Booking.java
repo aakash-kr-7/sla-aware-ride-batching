@@ -86,6 +86,18 @@ public class Booking {
         this.tripId = tripId;
     }
 
+    public void cancel() {
+        if (this.status == BookingStatus.DROPPED || this.status == BookingStatus.CANCELLED) {
+            throw new IllegalStateException("Booking cannot be cancelled from status: " + this.status);
+        }
+        
+        if (this.tripId != null) {
+            throw new UnsupportedOperationException("Trip replanning for cancelled bookings is not yet supported.");
+        }
+        
+        this.status = BookingStatus.CANCELLED;
+    }
+
     public void setStatus(BookingStatus status) {
         this.status = status;
     }

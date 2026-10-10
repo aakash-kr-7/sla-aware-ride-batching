@@ -100,6 +100,20 @@ public class BookingService {
             .orElseThrow(() -> new BookingNotFoundException("Booking not found with id: " + id));
     }
 
+    @Transactional
+    public BookingResponse cancelBooking(UUID employeeId, UUID bookingId) {
+        Booking booking = bookingRepository.findById(bookingId)
+            .orElseThrow(() -> new BookingNotFoundException("Booking not found with id: " + bookingId));
+            
+        if (!booking.getEmployee().getId().equals(employeeId)) {
+            throw new IllegalArgumentException("Booking does not belong to the requested employee");
+        }
+        
+        booking.cancel();
+        Booking saved = bookingRepository.save(booking);
+        return mapToResponse(saved);
+    }
+
     @Transactional(readOnly = true)
     public Page<BookingResponse> listBookingsByEmployee(UUID employeeId, Pageable pageable) {
         return bookingRepository.findByEmployeeId(employeeId, pageable)

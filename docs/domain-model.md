@@ -312,13 +312,77 @@ stateDiagram-v2
 
 ### 3.3 DriverOffer Lifecycle
 
+#### Sequence Diagram (Offer Dispatch & Concurrency)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant B as Batching Service
+    participant D as Dispatch Service
+    participant DB as PostgreSQL
+    participant D1 as Driver 1 (Nearest)
+    participant D2 as Driver 2 (Next Nearest)
+
+    B->>D: Batched Trip (Status: PLANNED)
+    D->>DB: Lookup eligible drivers (outside cool-off)
+    DB-->>D: [Driver 1, Driver 2]
+    
+    rect rgb(240, 248, 255)
+        note right of D: Transaction Boundary 1 (Offer Creation)
+        D->>DB: Insert DriverOffer (Driver 1, Status: OFFERED)
+    end
+    
+    D->>D1: Send Offer
+    D1-->>D: Reject Offer
+    
+    rect rgb(240, 248, 255)
+        note right of D: Transaction Boundary 2 (Rejection)
+        D->>DB: Update DriverOffer (Status: REJECTED, timestamp updated)
+    end
+    
+    note over D,DB: Cool-off period begins for Driver 1 for this Trip
+    
+    D->>DB: Lookup eligible drivers (Driver 1 excluded by cool-off)
+    DB-->>D: [Driver 2]
+    
+    rect rgb(240, 248, 255)
+        note right of D: Transaction Boundary 3 (Offer Creation)
+        D->>DB: Insert DriverOffer (Driver 2, Status: OFFERED)
+    end
+    
+    D->>D2: Send Offer
+    
+    rect rgb(255, 230, 230)
+        note over D2,DB: Concurrent Acceptance Race Simulation
+        par Driver 2 Accepts
+            D2-->>D: Accept Offer (Driver 2)
+            D->>DB: BEGIN Transaction A
+        and Another Driver Accepts (Race)
+            D1-->>D: Accept Offer (Driver 1 - Stale)
+            D->>DB: BEGIN Transaction B
+        end
+        
+        note over DB: SELECT FOR UPDATE on Trip row
+        DB-->>D: Transaction A acquires lock
+        DB-->>D: Transaction B blocks waiting for lock
+        
+        D->>DB: Update Trip (Status: DISPATCHED, Driver: Driver 2)
+        D->>DB: COMMIT Transaction A
+        
+        DB-->>D: Transaction B acquires lock, reads updated Trip status (DISPATCHED)
+        D-->>DB: ROLLBACK Transaction B (IllegalStateException)
+    end
+```
+
+#### State Diagram
+
 ```mermaid
 stateDiagram-v2
-    [*] --> PENDING : Offer sent to ranked driver
+    [*] --> OFFERED : Offer sent to ranked driver
     
-    PENDING --> ACCEPTED : Driver accepts within deadline
-    PENDING --> REJECTED : Driver explicitly declines
-    PENDING --> EXPIRED : Response timeout elapsed
+    OFFERED --> ACCEPTED : Driver accepts within deadline
+    OFFERED --> REJECTED : Driver explicitly declines
+    OFFERED --> EXPIRED : Response timeout elapsed
     
     ACCEPTED --> [*]
     REJECTED --> [*]
@@ -326,9 +390,9 @@ stateDiagram-v2
 ```
 
 **State Transition Rules**:
-- `PENDING -> ACCEPTED`: Assigns driver and vehicle to trip; transitions trip to `DISPATCHED`.
-- `PENDING -> REJECTED`: Logs rejection timestamp for cool-off enforcement; triggers offer to next ranked driver.
-- `PENDING -> EXPIRED`: Dispatches offer to next ranked driver; driver remains eligible for future offers.
+- `OFFERED -> ACCEPTED`: Transactionally locks the trip to prevent concurrent assignments. Assigns driver to trip; transitions trip to `DISPATCHED`.
+- `OFFERED -> REJECTED`: Logs rejection timestamp for cool-off enforcement; triggers offer to next ranked driver.
+- `OFFERED -> EXPIRED`: Dispatches offer to next ranked driver; driver remains eligible for future offers.
 
 ---
 
