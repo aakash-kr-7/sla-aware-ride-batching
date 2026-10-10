@@ -17,6 +17,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -37,7 +38,7 @@ class BatchPlannerTest {
         feasibilityEvaluator = mock(TripFeasibilityEvaluator.class);
         travelTimeEstimator = mock(TravelTimeEstimator.class);
 
-        planner = new BatchPlanner(routeInsertionPlanner, feasibilityEvaluator, travelTimeEstimator, 4);
+        planner = new BatchPlanner(routeInsertionPlanner, feasibilityEvaluator, travelTimeEstimator, 4, new SimpleMeterRegistry());
     }
 
     private Booking mockBooking(Instant sla) {

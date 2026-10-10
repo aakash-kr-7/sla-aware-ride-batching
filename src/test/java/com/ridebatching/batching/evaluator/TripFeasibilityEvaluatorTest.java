@@ -22,6 +22,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -43,7 +44,7 @@ class TripFeasibilityEvaluatorTest {
         pickupSlaConstraint = mock(PickupSlaConstraint.class);
         detourConstraint = mock(DetourConstraint.class);
 
-        evaluator = new TripFeasibilityEvaluator(capacityConstraint, pickupSlaConstraint, detourConstraint);
+        evaluator = new TripFeasibilityEvaluator(capacityConstraint, pickupSlaConstraint, detourConstraint, new SimpleMeterRegistry());
 
         // Default mock responses (all feasible)
         when(capacityConstraint.evaluate(any(), anyInt())).thenReturn(FeasibilityResult.feasible());

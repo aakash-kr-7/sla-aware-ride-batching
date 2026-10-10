@@ -11,6 +11,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.time.Duration;
+import io.micrometer.core.instrument.MeterRegistry;
 
 @Configuration
 @org.springframework.scheduling.annotation.EnableScheduling
@@ -36,15 +37,17 @@ public class BatchingConfiguration {
     @Bean
     public TripFeasibilityEvaluator tripFeasibilityEvaluator(CapacityConstraint capacityConstraint,
                                                              PickupSlaConstraint pickupSlaConstraint,
-                                                             DetourConstraint detourConstraint) {
-        return new TripFeasibilityEvaluator(capacityConstraint, pickupSlaConstraint, detourConstraint);
+                                                             DetourConstraint detourConstraint,
+                                                             MeterRegistry meterRegistry) {
+        return new TripFeasibilityEvaluator(capacityConstraint, pickupSlaConstraint, detourConstraint, meterRegistry);
     }
 
     @Bean
     public BatchPlanner batchPlanner(RouteInsertionPlanner routeInsertionPlanner,
                                      TripFeasibilityEvaluator tripFeasibilityEvaluator,
                                      TravelTimeEstimator travelTimeEstimator,
-                                     @Value("${app.fleet.default-vehicle-capacity:4}") int defaultVehicleCapacity) {
-        return new BatchPlanner(routeInsertionPlanner, tripFeasibilityEvaluator, travelTimeEstimator, defaultVehicleCapacity);
+                                     @Value("${app.fleet.default-vehicle-capacity:4}") int defaultVehicleCapacity,
+                                     MeterRegistry meterRegistry) {
+        return new BatchPlanner(routeInsertionPlanner, tripFeasibilityEvaluator, travelTimeEstimator, defaultVehicleCapacity, meterRegistry);
     }
 }

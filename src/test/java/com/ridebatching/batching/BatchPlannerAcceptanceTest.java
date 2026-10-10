@@ -18,6 +18,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -37,11 +38,11 @@ class BatchPlannerAcceptanceTest {
         DetourConstraint detourConstraint = new DetourConstraint(travelTimeEstimator, 1.0, Duration.ofMinutes(30));
         
         TripFeasibilityEvaluator feasibilityEvaluator = new TripFeasibilityEvaluator(
-                capacityConstraint, pickupSlaConstraint, detourConstraint);
+                capacityConstraint, pickupSlaConstraint, detourConstraint, new SimpleMeterRegistry());
         
         RouteInsertionPlanner routeInsertionPlanner = new RouteInsertionPlanner(travelTimeEstimator);
         
-        batchPlanner = new BatchPlanner(routeInsertionPlanner, feasibilityEvaluator, travelTimeEstimator, 4);
+        batchPlanner = new BatchPlanner(routeInsertionPlanner, feasibilityEvaluator, travelTimeEstimator, 4, new SimpleMeterRegistry());
     }
 
     private Booking createBooking(double pickupLat, double pickupLon, double dropoffLat, double dropoffLon, Instant slaDeadline) {
