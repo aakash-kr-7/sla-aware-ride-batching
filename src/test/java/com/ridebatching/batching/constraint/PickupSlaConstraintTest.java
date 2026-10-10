@@ -1,6 +1,7 @@
 package com.ridebatching.batching.constraint;
 
 import com.ridebatching.batching.FeasibilityResult;
+import com.ridebatching.batching.constraint.PickupSlaConstraint.PickupSlaRejectionDetails;
 import com.ridebatching.booking.Booking;
 import com.ridebatching.geo.GeoPoint;
 import com.ridebatching.geo.TravelTimeEstimator;
@@ -103,10 +104,11 @@ class PickupSlaConstraintTest {
 
         assertThat(result.isFeasible()).isFalse();
         assertThat(result.rejectionDetails()).isNotNull();
-        assertThat(result.rejectionDetails().constraintCode()).isEqualTo("PICKUP_SLA");
-        assertThat(result.rejectionDetails().affectedBooking()).isEqualTo(newBooking);
-        assertThat(result.rejectionDetails().estimatedPickup()).isEqualTo(Instant.parse("2026-10-10T08:10:00Z"));
-        assertThat(result.rejectionDetails().deadline()).isEqualTo(Instant.parse("2026-10-10T08:05:00Z"));
+        PickupSlaRejectionDetails details = (PickupSlaRejectionDetails) result.rejectionDetails();
+        assertThat(details.constraintCode()).isEqualTo("PICKUP_SLA");
+        assertThat(details.affectedBooking()).isEqualTo(newBooking);
+        assertThat(details.estimatedPickup()).isEqualTo(Instant.parse("2026-10-10T08:10:00Z"));
+        assertThat(details.deadline()).isEqualTo(Instant.parse("2026-10-10T08:05:00Z"));
     }
 
     @Test
@@ -132,10 +134,11 @@ class PickupSlaConstraintTest {
 
         assertThat(result.isFeasible()).isFalse();
         assertThat(result.rejectionDetails()).isNotNull();
-        assertThat(result.rejectionDetails().constraintCode()).isEqualTo("PICKUP_SLA");
-        assertThat(result.rejectionDetails().affectedBooking()).isEqualTo(existingBooking);
-        assertThat(result.rejectionDetails().estimatedPickup()).isEqualTo(Instant.parse("2026-10-10T08:10:00Z"));
-        assertThat(result.rejectionDetails().deadline()).isEqualTo(Instant.parse("2026-10-10T08:05:00Z"));
+        PickupSlaRejectionDetails details = (PickupSlaRejectionDetails) result.rejectionDetails();
+        assertThat(details.constraintCode()).isEqualTo("PICKUP_SLA");
+        assertThat(details.affectedBooking()).isEqualTo(existingBooking);
+        assertThat(details.estimatedPickup()).isEqualTo(Instant.parse("2026-10-10T08:10:00Z"));
+        assertThat(details.deadline()).isEqualTo(Instant.parse("2026-10-10T08:05:00Z"));
     }
 
     @Test
@@ -170,8 +173,9 @@ class PickupSlaConstraintTest {
         FeasibilityResult result = constraint.evaluate(route, routeStartTime, bookings);
 
         assertThat(result.isFeasible()).isFalse();
-        assertThat(result.rejectionDetails().constraintCode()).isEqualTo("PICKUP_SLA");
-        assertThat(result.rejectionDetails().estimatedPickup()).isEqualTo(Instant.parse("2026-10-10T08:00:00Z"));
-        assertThat(result.rejectionDetails().deadline()).isEqualTo(Instant.parse("2026-10-10T07:59:59Z"));
+        PickupSlaRejectionDetails details = (PickupSlaRejectionDetails) result.rejectionDetails();
+        assertThat(details.constraintCode()).isEqualTo("PICKUP_SLA");
+        assertThat(details.estimatedPickup()).isEqualTo(Instant.parse("2026-10-10T08:00:00Z"));
+        assertThat(details.deadline()).isEqualTo(Instant.parse("2026-10-10T07:59:59Z"));
     }
 }

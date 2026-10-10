@@ -16,6 +16,8 @@ public class PickupSlaConstraint {
 
     private final TravelTimeEstimator travelTimeEstimator;
 
+    public record PickupSlaRejectionDetails(String constraintCode, UUID affectedBooking, Instant estimatedPickup, Instant deadline) implements FeasibilityResult.RejectionDetails {}
+
     public PickupSlaConstraint(TravelTimeEstimator travelTimeEstimator) {
         this.travelTimeEstimator = travelTimeEstimator;
     }
@@ -56,7 +58,7 @@ public class PickupSlaConstraint {
                 if (currentEstimatedTime.isAfter(deadline)) {
                     return FeasibilityResult.infeasible(
                         "Pickup SLA would be exceeded",
-                        new FeasibilityResult.RejectionDetails(
+                        new PickupSlaRejectionDetails(
                             "PICKUP_SLA",
                             booking.getId(),
                             currentEstimatedTime,

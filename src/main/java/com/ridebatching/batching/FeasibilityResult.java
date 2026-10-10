@@ -10,7 +10,10 @@ import java.util.UUID;
  */
 public record FeasibilityResult(boolean isFeasible, String reason, RejectionDetails rejectionDetails) {
     
-    public record RejectionDetails(String constraintCode, UUID affectedBooking, Instant estimatedPickup, Instant deadline) {}
+    public interface RejectionDetails {
+        String constraintCode();
+        UUID affectedBooking();
+    }
     
     public static FeasibilityResult feasible() {
         return new FeasibilityResult(true, null, null);
