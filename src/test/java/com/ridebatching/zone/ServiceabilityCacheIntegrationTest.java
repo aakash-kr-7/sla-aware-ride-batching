@@ -81,7 +81,7 @@ class ServiceabilityCacheIntegrationTest {
         assertThat(result2.get().getName()).isEqualTo("Zone A");
         
         // To verify cache hit, let's delete via native query (bypassing Spring Data eviction)
-        jdbcTemplate.update("DELETE FROM serviceable_zone WHERE name = 'Zone A'");
+        jdbcTemplate.update("DELETE FROM serviceable_zones WHERE name = 'Zone A'");
         
         // Should STILL be present because of cache hit
         Optional<ServiceableZone> result3 = serviceabilityService.findZoneFor(testPoint);

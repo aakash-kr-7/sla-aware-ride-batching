@@ -11,6 +11,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.validation.Valid;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 
 @RestController
 @RequestMapping("/auth")
@@ -37,5 +39,10 @@ public class AuthController {
 
         String token = jwtService.generateToken(user.getUsername(), user.getRole());
         return ResponseEntity.ok(new AuthResponse(token));
+    }
+
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<String> handleAuthenticationException(AuthenticationException e) {
+        return ResponseEntity.status(401).body("Invalid credentials");
     }
 }

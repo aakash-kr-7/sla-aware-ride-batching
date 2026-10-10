@@ -54,7 +54,7 @@ class SecurityIntegrationTest {
     @Test
     void shouldDenyAccessToUnauthenticatedUser() throws Exception {
         mockMvc.perform(get("/api/bookings"))
-                .andExpect(status().isUnauthorized()); // Or 403 Forbidden depending on filter setup
+                .andExpect(status().isForbidden());
     }
 
     @Test
