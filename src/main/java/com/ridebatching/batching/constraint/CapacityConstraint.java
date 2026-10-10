@@ -2,8 +2,11 @@ package com.ridebatching.batching.constraint;
 
 import com.ridebatching.batching.FeasibilityResult;
 import com.ridebatching.fleet.Vehicle;
+import java.util.UUID;
 
 public class CapacityConstraint {
+
+    public record CapacityRejectionDetails(String constraintCode, UUID affectedBooking) implements FeasibilityResult.RejectionDetails {}
 
     /**
      * Evaluates if a given vehicle has enough capacity for a requested number of concurrent passengers.
@@ -18,7 +21,7 @@ public class CapacityConstraint {
             return FeasibilityResult.feasible();
         } else {
             return FeasibilityResult.infeasible("Peak concurrent passengers (" + peakConcurrentPassengers + 
-                ") exceeds vehicle capacity (" + seats + ")");
+                ") exceeds vehicle capacity (" + seats + ")", new CapacityRejectionDetails("CAPACITY", null));
         }
     }
 }
