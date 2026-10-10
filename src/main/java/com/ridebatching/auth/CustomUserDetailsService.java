@@ -1,10 +1,11 @@
 package com.ridebatching.auth;
 
-import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import java.util.Collections;
 
 @Service
 public class CustomUserDetailsService implements UserDetailsService {
@@ -20,10 +21,11 @@ public class CustomUserDetailsService implements UserDetailsService {
         UserAccount account = userAccountRepository.findByUsername(username)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
         
-        return User.builder()
-                .username(account.getUsername())
-                .password(account.getPasswordHash())
-                .roles(account.getRole().name())
-                .build();
+        return new CustomUserDetails(
+                account.getUsername(),
+                account.getPasswordHash(),
+                Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + account.getRole().name())),
+                account.getEmployeeId()
+        );
     }
 }

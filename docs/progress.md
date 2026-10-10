@@ -17,7 +17,8 @@ This document tracks the actual state of the repository, reflecting features tha
 | driver dispatch        | D        | I           | T      | Ranking, offers, and concurrent acceptance |
 | late insertion         | D        | I           | T      | Concurrency safe, respects capacity and SLA |
 | cancellation           | D        | I           | T      | Pending bookings; trip reassessment/cancel on empty |
-| authentication         | D        | I           | T      | JWT and UserAccounts (separated from Employee domain) |
+| authentication         | D        | I           | T      | JWT, UserAccounts, Roles (EMPLOYEE, ADMIN, APPROVER) |
+| authorization          | D        | I           | T      | Server-side ownership enforcement & SLA Escalations |
 | observability          | —        | —           | —      | |
 | caching                | —        | —           | —      | |
 | failure handling       | —        | —           | —      | |

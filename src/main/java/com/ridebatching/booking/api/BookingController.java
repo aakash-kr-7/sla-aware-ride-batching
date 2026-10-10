@@ -13,6 +13,8 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.access.prepost.PostAuthorize;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -30,6 +32,7 @@ public class BookingController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasRole('ADMIN') or #employeeId == authentication.principal.employeeId")
     public BookingResponse createBooking(
             @RequestHeader("X-Employee-Id") UUID employeeId,
             @Valid @RequestBody BookingRequest request) {
@@ -37,11 +40,13 @@ public class BookingController {
     }
 
     @GetMapping("/{id}")
+    @PostAuthorize("hasRole('ADMIN') or returnObject.employeeId() == authentication.principal.employeeId")
     public BookingResponse getBooking(@PathVariable UUID id) {
         return bookingService.getBooking(id);
     }
 
     @org.springframework.web.bind.annotation.DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN') or #employeeId == authentication.principal.employeeId")
     public BookingResponse cancelBooking(
             @RequestHeader("X-Employee-Id") UUID employeeId,
             @PathVariable UUID id) {
@@ -49,6 +54,7 @@ public class BookingController {
     }
 
     @GetMapping
+    @PreAuthorize("hasRole('ADMIN') or #employeeId == authentication.principal.employeeId")
     public com.ridebatching.common.dto.PageResponse<BookingResponse> listBookings(
             @RequestHeader("X-Employee-Id") UUID employeeId,
             Pageable pageable) {
