@@ -7,7 +7,6 @@ import com.ridebatching.geo.TravelTimeEstimator;
 import com.ridebatching.trip.RouteInsertionPlanner;
 import com.ridebatching.trip.Trip;
 import com.ridebatching.trip.TripStop;
-import org.springframework.beans.factory.annotation.Value;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -35,7 +34,7 @@ public class BatchPlanner {
     public BatchPlanner(RouteInsertionPlanner routeInsertionPlanner,
                         TripFeasibilityEvaluator feasibilityEvaluator,
                         TravelTimeEstimator travelTimeEstimator,
-                        @Value("${app.fleet.default-vehicle-capacity:4}") int defaultVehicleCapacity,
+                        int defaultVehicleCapacity,
                         MeterRegistry meterRegistry) {
         this.routeInsertionPlanner = routeInsertionPlanner;
         this.feasibilityEvaluator = feasibilityEvaluator;
@@ -82,8 +81,6 @@ public class BatchPlanner {
                 
                 Trip newTrip = new Trip(UUID.randomUUID(), routeStartTime, Instant.now());
                 List<TripStop> initialRoute = routeInsertionPlanner.planBestInsertion(Collections.emptyList(), booking);
-                // Note: feasibility of single request in an empty trip is assumed true if capacity >= 1 and detours=0.
-                // In production, we might still want to evaluate it in case SLA is already violated.
                 Map<UUID, Booking> routeBookings = new HashMap<>();
                 for (TripStop stop : initialRoute) {
                     routeBookings.put(stop.getBookingId(), currentBookings.get(stop.getBookingId()));
@@ -97,13 +94,10 @@ public class BatchPlanner {
                     booking.setTripId(newTrip.getId());
                     trips.add(newTrip);
                 } else {
-                    // Logically, a single request could be infeasible if the routeStartTime is too late 
-                    // for its SLA. The domain test doesn't specify rejecting un-serviceable requests here, 
-                    // but we just assign it anyway to its own trip if it's the only option, or drop it.
-                    // Let's assign it anyway as a dedicated trip. It's the best we can do.
-                    newTrip.assignRoute(initialRoute);
-                    booking.setTripId(newTrip.getId());
-                    trips.add(newTrip);
+                    // Splitting cannot rescue an already missed SLA. Keep the booking
+                    // pending rather than persist a trip known to violate the promise.
+                    log.warn("Booking left pending: single-request trip is infeasible, reason={}",
+                            trace.rejectionDetails().constraintCode());
                 }
             }
         }

@@ -61,6 +61,20 @@ class BatchPlannerAcceptanceTest {
     }
 
     @Test
+    void shouldLeaveExpiredBookingPendingInsteadOfCreatingInfeasibleSoloTrip() {
+        Instant now = Instant.parse("2026-10-10T12:00:00Z");
+        Employee employee = new Employee(UUID.randomUUID(), "EXPIRED", "Late rider", "late@example.com");
+        Booking booking = new Booking(UUID.randomUUID(), employee, new GeoPoint(0, 0),
+                new GeoPoint(0.01, 0.01), now.minusSeconds(1800), BookingStatus.PENDING,
+                now.minusSeconds(1), now.minusSeconds(1800), "expired");
+
+        assertThat(batchPlanner.planBatch(List.of(booking), now)).isEmpty();
+        assertThat(booking.getTripId()).isNull();
+        assertThat(booking.getStatus()).isEqualTo(BookingStatus.PENDING);
+    }
+
+
+    @Test
     void shouldSplitFiveCompatibleRequestsIntoTwoTripsDueToCapacity() {
         // Given 5 requests starting at the exact same location and going to the exact same destination
         // They are perfectly compatible in terms of direction and time, but capacity is 4.
