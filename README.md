@@ -261,15 +261,38 @@ I want each meaningful capability or design correction to appear as its own chan
 
 That should also make it possible to see how the solution changed as I understood the problem better.
 
+## Building and Testing
+
+### Prerequisites
+
+- Java 21 JDK (`JAVA_HOME` pointing to JDK 21)
+- Docker daemon (running, required for Testcontainers PostgreSQL integration tests)
+
+### Commands
+
+Compile application classes:
+
+```bash
+./mvnw clean compile
+```
+
+Run test suite (including Testcontainers PostgreSQL context verification):
+
+```bash
+./mvnw clean test
+```
+
+Package executable JAR:
+
+```bash
+./mvnw clean package
+```
+
 ## Current status
 
-**Stage: problem analysis and design**
+**Stage: Phase 1 — Foundation (Skeleton Initialized)**
 
-At this point I have:
-
-- read and decomposed the case study;
-- identified the main system invariants;
-- outlined the likely request lifecycle;
-- identified several assumptions that need explicit decisions.
-
-Next I will document those assumptions and bootstrap the smallest runnable backend before modelling the booking lifecycle.
+At this point:
+- Spring Boot 3.3.5 and Java 21 project skeleton initialized.
+- Maven Wrapper configured (`./mvnw` and `mvnw.cmd`).
+- Base application context test verified against PostgreSQL via Testcontainers.
