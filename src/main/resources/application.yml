@@ -28,6 +28,10 @@ management:
         include: health,info
 
 app:
+  security:
+    jwt:
+      secret: ${JWT_SECRET:default-insecure-secret-do-not-use-in-production-1234567890}
+      expiration-ms: 3600000
   batching:
     window-duration-minutes: 15
     max-bearing-angle-diff-degrees: 45

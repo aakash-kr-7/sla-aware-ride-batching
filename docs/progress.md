@@ -17,7 +17,7 @@ This document tracks the actual state of the repository, reflecting features tha
 | driver dispatch        | D        | I           | T      | Ranking, offers, and concurrent acceptance |
 | late insertion         | D        | I           | T      | Concurrency safe, respects capacity and SLA |
 | cancellation           | D        | I           | T      | Pending bookings; trip reassessment/cancel on empty |
-| authentication         | —        | —           | —      | |
+| authentication         | D        | I           | T      | JWT and UserAccounts (separated from Employee domain) |
 | observability          | —        | —           | —      | |
 | caching                | —        | —           | —      | |
 | failure handling       | —        | —           | —      | |
@@ -40,8 +40,8 @@ flowchart TD
     Phase4 --> Phase5[Phase 5: Hardening]
 
     style Phase1 fill:#d4edda,stroke:#28a745,color:#155724
-    style Phase2 fill:#f8f9fa,stroke:#6c757d
-    style Phase3 fill:#f8f9fa,stroke:#6c757d
-    style Phase4 fill:#f8f9fa,stroke:#6c757d
+    style Phase2 fill:#d4edda,stroke:#28a745,color:#155724
+    style Phase3 fill:#d4edda,stroke:#28a745,color:#155724
+    style Phase4 fill:#d4edda,stroke:#28a745,color:#155724
     style Phase5 fill:#f8f9fa,stroke:#6c757d
 ```
