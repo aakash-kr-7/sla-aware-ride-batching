@@ -1,28 +1,15 @@
-# D06 - Request Clustering
+# ADR 006: Leader-Based Direction Clustering
 
-## Context
-Once eligible pending bookings are gathered for a discrete time window, they must be clustered into candidate trips. We need to evaluate whether two passengers' journeys can be safely combined without introducing unacceptable detours or violating SLA limits.
+Status: Component implemented and unit-tested; not integrated into `formBatches`.
 
-However, full routing evaluations are expensive ($O(N^2)$). A fast pre-filtering step is required to bundle only trips that have a reasonable chance of succeeding.
+## Decision and rationale
 
-## Decision
-We implement a **Greedy Leader-Based Request Clusterer** using two criteria:
-1. **Serviceable Pickup Zone**: Bookings must originate in the same logical zone.
-2. **Direction Compatibility**: The overall straight-line bearing (pickup to dropoff) of a booking must fall within an acceptable threshold (`app.batching.max-bearing-angle-diff-degrees`, default 45°) of the cluster's base bearing.
+Group bookings by resolved pickup-zone ID, sort zones by ID and bookings by creation time/UUID, then add each booking to the first cluster whose leader bearing is within the configured angle. The first booking stays the leader. An unknown current zone uses sentinel ID -1.
 
-### Algorithm
-1. Group bookings by their computed pickup `ServiceableZone`.
-2. Deterministically sort bookings in each bucket by `createdAt` ascending, then `id` ascending.
-3. For each booking in the bucket:
-   - Compute its forward bearing.
-   - Iterate through existing clusters. If the booking's bearing is within `max-bearing-angle-diff-degrees` of the cluster's **leader** (the first booking in the cluster), append it to the cluster and stop searching.
-   - If no compatible cluster exists, create a new cluster with this booking as the leader.
+This is a cheap geographic prefilter before expensive route evaluation. Leader comparison is inspectable and avoids transitive chaining through many slightly different headings. It is not a detour constraint: two members may each lie within 45 degrees of a leader while being 90 degrees apart from each other.
 
-### Complexity
-- **Time**: $O(N \log N)$ for sorting, plus $O(N \cdot C)$ for clustering, where $N$ is the number of bookings per window and $C$ is the number of resulting clusters. Worst-case is $O(N^2)$ if no bookings align, but practically $N$ per 15-min window is bounded, making the algorithm highly efficient.
-- **Space**: $O(N)$ to store groups and resulting candidate sets.
+## Trade-offs and integration boundary
 
-### Trade-offs
-- Greedy clustering does not guarantee the global optimal grouping (e.g. minimizing overall variance).
-- A strict leader-based approach may skew cluster bounds if the leader is an edge case.
-- **Advantage**: It is deterministic, fast, understandable, and does not require a heavy machine-learning layer, satisfying our constraints for bounded complexity.
+Greedy membership depends on leader choice and does not optimize grouping globally. Zone membership is recomputed and can become stale through caching; the unknown-zone group is not rejection handling.
+
+Window/zone/direction orchestration remains unconnected. A future integration must still evaluate capacity, SLA and detour and bound actual input size; a 15-minute bucket does not establish a demand bound. See [strategy](../batching-strategy.md) and [complexity](../algorithm-analysis.md) for current execution and costs.

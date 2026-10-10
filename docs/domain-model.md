@@ -2,14 +2,7 @@
 
 Declared enum states do not imply implemented execution flows. The following describes persisted data and reachable operations.
 
-| Package | Responsibility |
-| --- | --- |
-| `booking` | Employee reference data; booking request, dedup key, slot, pickup deadline and trip association |
-| `trip` | Trip/stop aggregate and route insertion search |
-| `driver`, `dispatch` | Driver state, location/capacity, selection, offers and assignment |
-| `zone`, `geo` | Circular geofences, coordinates, bearing and distance/ETA calculations |
-| `fleet` | Non-persisted `Vehicle` and positive `Capacity` planning values; no vehicle table |
-| `auth`, `escalation` | Account credentials/roles and exception-record inspection |
+Package responsibilities are in [architecture](architecture.md).
 
 ## Stored relationships
 
@@ -36,18 +29,32 @@ These relationships have database foreign keys. Serviceability is computed: book
 | `UserAccount` / `user_account` | UUID, unique username, password hash, role, optional employee FK, timestamps |
 | `SlaEscalation` / `sla_escalation` | UUID, reference ID/type, reason, status, timestamps |
 
-`Trip.windowStartTime` receives route-start time, not a collection bucket. Stops have no ETA/arrival/visit fields. Offers have no response deadline.
+## Reachable state transitions
 
-## Invariants and transitions
+```mermaid
+stateDiagram-v2
+    state "Booking" as Booking {
+        [*] --> PENDING: create
+        PENDING --> CONFIRMED: batching or late insertion
+        PENDING --> CANCELLED: cancel
+        CONFIRMED --> CANCELLED: cancel
+        CANCELLED --> CANCELLED: repeated cancellation
+    }
+    state "Trip" as Trip {
+        [*] --> PLANNED: planning
+        PLANNED --> DISPATCHED: accepted offer
+        PLANNED --> TripCancelled: last booking removed
+        DISPATCHED --> TripCancelled: last booking removed
+        state "CANCELLED" as TripCancelled
+    }
+```
 
-- PostgreSQL enforces one active booking per dedup key; cancelled rows are excluded.
-- `Trip.assignRoute` rejects duplicate pickup/dropoff, missing dropoff and dropoff-before-pickup; sequence starts at 1. Aggregate persistence cascades to stops with orphan removal.
-- Feasibility checks structure, peak occupancy, pickup SLA and detour in sequence.
-- Booking starts `PENDING`; batching/late insertion sets `CONFIRMED`; cancellation sets `CANCELLED`. `PICKED_UP`/`DROPPED` exist without execution APIs. Cancellation rejects `DROPPED` only.
-- Trip starts `PLANNED`; accepted offer sets `DISPATCHED`; removing all bookings sets `CANCELLED`. `OFFERED`, `IN_PROGRESS`, `COMPLETED` are declared but not set by current flows.
-- Driver transitions `OFFLINE -> AVAILABLE -> ON_BREAK -> AVAILABLE`; assignment records active trip ID. No `BUSY` state exists. Eligibility checks status and active-trip reference.
-- Offer starts `OFFERED`; accept/reject/expire sets `ACCEPTED`/`REJECTED`/`EXPIRED`. Repeating accept/reject is permitted. One accepted offer per trip is DB-enforced; multiple open offers are possible. Expiration has no scheduler.
-- Account roles: `EMPLOYEE`, `ADMIN`, `APPROVER`. Current account details are reloaded on authenticated requests.
-- Escalation states: `OPEN`, `RESOLVED`. Inspection exists; automatic creation/resolution does not.
+These are service-reachable transitions, not all enum values or setter capabilities. Booking `PICKED_UP`/`DROPPED` and trip `OFFERED`/`IN_PROGRESS`/`COMPLETED` have no execution workflow. A booking already in PICKED_UP can currently be cancelled; DROPPED cannot. Cancelling retains its trip ID. `Trip.windowStartTime` records planning route-start time, not a collection bucket.
 
-See [API contracts](api-design.md) and [trip mutations](trip-mutation-flows.md).
+`Trip.assignRoute` rejects duplicate pickup/dropoff, missing dropoff and dropoff-before-pickup. It sequences stops from 1 and owns cascaded persistence/orphan removal. Stops have no ETA, arrival or visited fields. `vehicleId` is not populated by the current planner; `Vehicle`/`Capacity` are values, not fleet records.
+
+Driver domain methods support OFFLINE -> AVAILABLE, AVAILABLE -> ON_BREAK, ON_BREAK -> AVAILABLE and going offline when no active trip exists. Assignment retains AVAILABLE and sets activeTripId; `completeTrip` clears that reference, but no application execution flow calls it. There is no BUSY enum state.
+
+Offers transition OFFERED -> ACCEPTED / REJECTED / EXPIRED; repeating accept/reject is allowed at the entity level. The partial unique index enforces at most one ACCEPTED offer per trip, not one outstanding offer or one active trip per driver. Offers have no response deadline; expire has no automatic caller.
+
+Accounts have EMPLOYEE, ADMIN or APPROVER roles and an optional employee link; transport employees have no credentials. Escalations have OPEN/RESOLVED states; only inspection is exposed. See [API](api-design.md), [planning](batching-strategy.md) and [failure boundaries](failure-modes.md).

@@ -4,15 +4,25 @@ Java Spring Boot backend for the On-Demand Ride Batching case study: combine emp
 
 The repository implements booking, planning, dispatch and trip mutation, PostgreSQL persistence, JWT authorization, zone caching and metrics. Some case-study flows remain incomplete; see the limitations below.
 
+## Reviewer reading order
+
+1. This README: problem, code navigation, build and local setup.
+2. [Architecture](docs/architecture.md), then [domain model](docs/domain-model.md): boundaries, booking/offer flow, persisted relationships and reachable states.
+3. [Assumptions](docs/assumptions.md) and [batching strategy](docs/batching-strategy.md): policy interpretations, insertion and localized cancellation.
+4. [Failure modes](docs/failure-modes.md) and [API contract](docs/api-design.md): transaction/access boundaries and operational limits.
+5. [Test matrix](docs/test-matrix.md), then [algorithm analysis](docs/algorithm-analysis.md): evidence and cost bounds.
+
+Each page owns a distinct topic. Decision records explain specific trade-offs; they do not repeat the full architecture. Case-study requirements describe expected behavior, implementation decisions describe code choices, assessment approximations describe model limits, and future improvements describe work not present in this repository.
+
 ## Start with the important logic
 
 | Question | Code | Design context |
 | --- | --- | --- |
 | How does one request become one booking? | [BookingService](src/main/java/com/ridebatching/booking/BookingService.java), [DeduplicationKeyGenerator](src/main/java/com/ridebatching/booking/DeduplicationKeyGenerator.java) | [Deduplication](docs/decisions/0005-handle-booking-deduplication.md) |
-| How are trips formed? | [BatchingService](src/main/java/com/ridebatching/batching/BatchingService.java), [BatchPlanner](src/main/java/com/ridebatching/batching/BatchPlanner.java) | [Batching flow](docs/batching-design.md) |
+| How are trips formed? | [BatchingService](src/main/java/com/ridebatching/batching/BatchingService.java), [BatchPlanner](src/main/java/com/ridebatching/batching/BatchPlanner.java) | [Batching flow](docs/batching-strategy.md) |
 | What makes an insertion feasible? | [TripFeasibilityEvaluator](src/main/java/com/ridebatching/batching/evaluator/TripFeasibilityEvaluator.java), [constraints](src/main/java/com/ridebatching/batching/constraint) | [Assumptions](docs/assumptions.md) |
-| How are routes changed? | [RouteInsertionPlanner](src/main/java/com/ridebatching/trip/RouteInsertionPlanner.java), [Trip](src/main/java/com/ridebatching/trip/Trip.java) | [Trip mutations](docs/trip-mutation-flows.md) |
-| How are drivers selected? | [DispatchService](src/main/java/com/ridebatching/dispatch/DispatchService.java), [driver policies](src/main/java/com/ridebatching/driver) | [Dispatch lifecycle](docs/driver-dispatch-lifecycle.md) |
+| How are routes changed? | [RouteInsertionPlanner](src/main/java/com/ridebatching/trip/RouteInsertionPlanner.java), [Trip](src/main/java/com/ridebatching/trip/Trip.java) | [Trip mutations](docs/batching-strategy.md) |
+| How are drivers selected? | [DispatchService](src/main/java/com/ridebatching/dispatch/DispatchService.java), [driver policies](src/main/java/com/ridebatching/driver) | [Dispatch lifecycle](docs/architecture.md) |
 | Where are geographic rules? | [ServiceabilityService](src/main/java/com/ridebatching/zone/ServiceabilityService.java), [geo](src/main/java/com/ridebatching/geo) | [Zone caching](docs/decisions/007-zone-caching.md) |
 
 ## Repository map
@@ -87,11 +97,7 @@ The app listens on port 8080 by default. Open [Swagger UI](http://localhost:8080
 
 ## Design and operational notes
 
-- [Architecture and trade-offs](docs/decisions/001-initial-architecture.md)
-- [Case-study requirements](docs/problem-analysis.md), [implemented domain model](docs/domain-model.md)
-- [Authorization boundaries](docs/auth-boundaries.md)
-- [Failure and recovery limits](docs/failure-modes.md), [observability](docs/observability.md)
-- [Algorithm complexity](docs/algorithm-analysis.md), [historical benchmarks](docs/benchmarks/batching.md)
+Decision records cover [dedup transaction boundaries](docs/decisions/0005-handle-booking-deduplication.md), [leader-based clustering](docs/decisions/0006-request-clustering.md) and [zone caching](docs/decisions/007-zone-caching.md). [Historical benchmarks](docs/benchmarks/batching.md) retain dated measurements rather than asserting current performance.
 
 Deduplication and trip mutation rely on PostgreSQL constraints and transactions. Only active-zone lookups are cached. Routing uses local distance/speed estimates rather than live road-network data.
 

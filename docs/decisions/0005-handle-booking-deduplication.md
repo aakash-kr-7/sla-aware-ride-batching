@@ -1,59 +1,15 @@
-# 5. Handle Booking Deduplication
+# ADR 005: Database-Arbitrated Booking Deduplication
 
-Date: 2026-10-10
+Status: Implemented for active bookings created through `BookingService`.
 
-## Status
+## Decision and rationale
 
-Accepted
+Use a stored deterministic key and PostgreSQL's partial unique index, not an existence check followed by insert. Two callers can both observe absence; only the database can arbitrate that race across processes. The key includes employee, normalized pickup/dropoff and UTC slot; normalization policy is owned by [assumptions](../assumptions.md).
 
-## Context
+`createBooking` has no enclosing service transaction. `saveAndFlush` uses the repository transaction, so a losing constraint violation rolls it back before the service looks up the winner. Catching an insert failure inside an already rollback-only outer transaction would not give the HTTP path a usable successful response.
 
-We previously relied on a complex database index to enforce booking deduplication. As part of a recent refactor, we introduced `DeduplicationKeyGenerator` to produce a deterministic key. We needed to persist this key in the database and handle race conditions when two identical requests occur concurrently.
+## Trade-offs and scope
 
-A naive approach would be to check for existence `exists()` before creating the row with `save()`. However, this is prone to race conditions if two threads execute `exists()` concurrently before either persists the new row.
+V4 replaces the earlier coordinate-expression index with `idx_bookings_dedup` on `deduplication_key`, excluding CANCELLED rows. There is no separate client idempotency token. Direct/legacy rows can contain null keys, so the database index alone does not deduplicate every possible write.
 
-Furthermore, if we simply attempt the save within a `@Transactional` block, a `DataIntegrityViolationException` would mark the entire transaction as rollback-only. This would prevent us from returning the existing booking to the user as a successful response, leading to a HTTP 500 error instead.
-
-## Decision
-
-We decided to handle the database uniqueness constraint natively and narrowly:
-1. Replaced the complex multi-column unique index with a simpler index on the pre-computed `deduplication_key`.
-2. Removed the `@Transactional` boundary from `BookingService.createBooking` and switched to using `BookingRepository.saveAndFlush`. This forces the constraint check immediately without relying on a transaction commit.
-3. Caught the `DataIntegrityViolationException` in the service layer when `saveAndFlush` is invoked, and responded to this exception by querying and returning the existing duplicated booking.
-
-## Consequences
-
-- We safely resolve race conditions during concurrent identical booking creation without throwing 500 errors due to a doomed transaction.
-- The `deduplication_key` column makes uniqueness explicitly visible in the data model and simpler to index in the database.
-
-## Sequence Diagram
-
-The following diagram illustrates how two perfectly simultaneous requests for the same booking are handled without throwing database errors or returning 500s.
-
-```mermaid
-sequenceDiagram
-    participant A as Request A
-    participant B as Request B
-    participant S as Application Service
-    participant DB as PostgreSQL
-
-    A->>S: createBooking()
-    B->>S: createBooking()
-    
-    note over S: Generates same deduplication_key for both
-    
-    par Race Condition
-        S->>DB: saveAndFlush() (Request A)
-        S->>DB: saveAndFlush() (Request B)
-    end
-    
-    DB-->>S: OK (Winner)
-    S-->>A: Returns Booking ID 123
-    
-    DB--xS: DataIntegrityViolationException (Loser)
-    note over S: Catch Exception
-    
-    S->>DB: findByDeduplicationKey()
-    DB-->>S: Returns existing Booking ID 123
-    S-->>B: Returns Booking ID 123
-```
+The catch handles any `DataIntegrityViolationException`, not just the dedup constraint. Lookup does not filter cancelled history; multiple same-key historical rows can make it ambiguous. Separate booking-save and late-insertion transactions also allow a saved booking after insertion failure. Those limits and the concurrency evidence belong in [failure modes](../failure-modes.md) and [test matrix](../test-matrix.md).
