@@ -16,6 +16,9 @@ import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import com.ridebatching.booking.exception.BookingNotFoundException;
 
 @Service
 public class BookingService {
@@ -83,6 +86,19 @@ public class BookingService {
                 .map(this::mapToResponse)
                 .orElseThrow(() -> new IllegalStateException("Duplicate booking detected but could not be retrieved", e));
         }
+    }
+
+    @Transactional(readOnly = true)
+    public BookingResponse getBooking(UUID id) {
+        return bookingRepository.findById(id)
+            .map(this::mapToResponse)
+            .orElseThrow(() -> new BookingNotFoundException("Booking not found with id: " + id));
+    }
+
+    @Transactional(readOnly = true)
+    public Page<BookingResponse> listBookingsByEmployee(UUID employeeId, Pageable pageable) {
+        return bookingRepository.findByEmployeeId(employeeId, pageable)
+            .map(this::mapToResponse);
     }
 
     private Instant normalizeTo15MinuteSlot(Instant time) {

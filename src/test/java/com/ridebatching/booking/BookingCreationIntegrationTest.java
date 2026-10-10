@@ -39,6 +39,8 @@ class BookingCreationIntegrationTest extends AbstractPostgresIntegrationTest {
 
     @Test
     void shouldPersistBookingFromApi() throws Exception {
+        bookingRepository.deleteAll();
+        
         // Setup initial data
         Employee employee = new Employee(UUID.randomUUID(), "EMP-INTEG-1", "Bob", "bob.integ@example.com");
         employeeRepository.saveAndFlush(employee);

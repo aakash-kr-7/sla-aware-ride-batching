@@ -5,9 +5,13 @@ import org.springframework.stereotype.Repository;
 
 import java.util.UUID;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import java.util.Optional;
 
 @Repository
 public interface BookingRepository extends JpaRepository<Booking, UUID> {
     Optional<Booking> findByDeduplicationKey(String deduplicationKey);
+    
+    Page<Booking> findByEmployeeId(UUID employeeId, Pageable pageable);
 }

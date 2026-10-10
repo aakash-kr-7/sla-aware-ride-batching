@@ -6,11 +6,15 @@ import com.ridebatching.booking.dto.BookingResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.util.UUID;
 
@@ -30,5 +34,18 @@ public class BookingController {
             @RequestHeader("X-Employee-Id") UUID employeeId,
             @Valid @RequestBody BookingRequest request) {
         return bookingService.createBooking(employeeId, request);
+    }
+
+    @GetMapping("/{id}")
+    public BookingResponse getBooking(@PathVariable UUID id) {
+        return bookingService.getBooking(id);
+    }
+
+    @GetMapping
+    public com.ridebatching.common.dto.PageResponse<BookingResponse> listBookings(
+            @RequestHeader("X-Employee-Id") UUID employeeId,
+            Pageable pageable) {
+        Page<BookingResponse> page = bookingService.listBookingsByEmployee(employeeId, pageable);
+        return com.ridebatching.common.dto.PageResponse.of(page);
     }
 }

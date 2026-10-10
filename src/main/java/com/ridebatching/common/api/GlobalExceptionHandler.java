@@ -1,5 +1,6 @@
 package com.ridebatching.common.api;
 
+import com.ridebatching.booking.exception.BookingNotFoundException;
 import com.ridebatching.booking.exception.UnserviceableZoneException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
@@ -12,6 +13,17 @@ import java.time.Instant;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(BookingNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public ApiErrorResponse handleBookingNotFound(BookingNotFoundException ex, HttpServletRequest request) {
+        return new ApiErrorResponse(
+            "BOOKING_NOT_FOUND",
+            ex.getMessage(),
+            Instant.now(),
+            request.getRequestURI()
+        );
+    }
 
     @ExceptionHandler(UnserviceableZoneException.class)
     @ResponseStatus(HttpStatus.UNPROCESSABLE_ENTITY)
