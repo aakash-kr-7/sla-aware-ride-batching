@@ -138,6 +138,8 @@ Entity `ServiceableZone` defines:
 A pickup coordinate $(lat, lon)$ is serviceable if there exists an active zone where:
 $$\text{haversine\_distance}((lat, lon), (center\_lat, center\_lon)) \le radius\_meters$$
 
+If multiple active zones overlap, the coordinate resolves to the zone whose center is closest to the coordinate. If distances are identical, it resolves to the zone with the lowest ID.
+
 ### Rationale
 Circular geofences require only the standard Haversine distance formula. This avoids heavy external GIS dependencies (like PostGIS or spatial index libraries) in the initial foundation while still providing strict validation.
 
