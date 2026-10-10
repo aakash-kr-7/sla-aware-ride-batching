@@ -21,4 +21,14 @@ public abstract class AbstractPostgresIntegrationTest {
     static {
         postgres.start();
     }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+
+    @org.junit.jupiter.api.AfterEach
+    protected void cleanupDatabase() {
+        if (jdbcTemplate != null) {
+            jdbcTemplate.execute("TRUNCATE TABLE trip_stops, trips, bookings, employees CASCADE");
+        }
+    }
 }
