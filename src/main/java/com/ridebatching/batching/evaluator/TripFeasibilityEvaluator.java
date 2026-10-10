@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import io.micrometer.core.instrument.MeterRegistry;
 
 /**
  * Composes batching rules and constraints to evaluate trip insertion candidates.
@@ -30,14 +31,17 @@ public class TripFeasibilityEvaluator {
     private final CapacityConstraint capacityConstraint;
     private final PickupSlaConstraint pickupSlaConstraint;
     private final DetourConstraint detourConstraint;
+    private final MeterRegistry meterRegistry;
 
     public TripFeasibilityEvaluator(
             CapacityConstraint capacityConstraint,
             PickupSlaConstraint pickupSlaConstraint,
-            DetourConstraint detourConstraint) {
+            DetourConstraint detourConstraint,
+            MeterRegistry meterRegistry) {
         this.capacityConstraint = capacityConstraint;
         this.pickupSlaConstraint = pickupSlaConstraint;
         this.detourConstraint = detourConstraint;
+        this.meterRegistry = meterRegistry;
     }
 
     /**
@@ -120,6 +124,7 @@ public class TripFeasibilityEvaluator {
         evaluated.add("PICKUP_SLA");
         FeasibilityResult slaResult = pickupSlaConstraint.evaluate(candidateRoute, routeStartTime, currentBookings);
         if (!slaResult.isFeasible()) {
+            meterRegistry.counter("batching.sla_rejections").increment();
             return logAndReturn(traceId, candidateRoute, candidateBookingId, evaluated, slaResult);
         }
 
@@ -127,6 +132,7 @@ public class TripFeasibilityEvaluator {
         evaluated.add("DETOUR");
         FeasibilityResult detourResult = detourConstraint.evaluate(candidateRoute, currentBookings);
         if (!detourResult.isFeasible()) {
+            meterRegistry.counter("batching.detour_rejections").increment();
             return logAndReturn(traceId, candidateRoute, candidateBookingId, evaluated, detourResult);
         }
 

@@ -14,9 +14,14 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import io.micrometer.core.instrument.MeterRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 public class DispatchService {
+
+    private static final Logger log = LoggerFactory.getLogger(DispatchService.class);
 
     private final DriverRepository driverRepository;
     private final DriverOfferRepository offerRepository;
@@ -24,19 +29,22 @@ public class DispatchService {
     private final DriverProximityRanker ranker;
     private final RejectionCoolOffPolicy coolOffPolicy;
     private final TripRepository tripRepository;
+    private final MeterRegistry meterRegistry;
 
     public DispatchService(DriverRepository driverRepository,
                            DriverOfferRepository offerRepository,
                            DriverEligibilityPolicy eligibilityPolicy,
                            DriverProximityRanker ranker,
                            RejectionCoolOffPolicy coolOffPolicy,
-                           TripRepository tripRepository) {
+                           TripRepository tripRepository,
+                           MeterRegistry meterRegistry) {
         this.driverRepository = driverRepository;
         this.offerRepository = offerRepository;
         this.eligibilityPolicy = eligibilityPolicy;
         this.ranker = ranker;
         this.coolOffPolicy = coolOffPolicy;
         this.tripRepository = tripRepository;
+        this.meterRegistry = meterRegistry;
     }
 
     @Transactional
@@ -61,6 +69,8 @@ public class DispatchService {
         DriverOffer offer = new DriverOffer(UUID.randomUUID(), selectedDriver.getId(), tripId);
         offerRepository.save(offer);
         
+        meterRegistry.counter("dispatch.offers").increment();
+        
         return Optional.of(offer);
     }
     
@@ -70,6 +80,9 @@ public class DispatchService {
                 .orElseThrow(() -> new IllegalArgumentException("Offer not found"));
         offer.reject();
         offerRepository.save(offer);
+        
+        meterRegistry.counter("dispatch.rejections").increment();
+        log.info("Driver rejected offer");
     }
 
     @Transactional
@@ -94,5 +107,7 @@ public class DispatchService {
                 .orElseThrow(() -> new IllegalArgumentException("Driver not found"));
         driver.assignTrip(trip.getId());
         driverRepository.save(driver);
+        
+        log.info("Driver accepted offer");
     }
 }

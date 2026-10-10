@@ -13,6 +13,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 
 @Service
 public class BatchingService {
@@ -23,12 +25,14 @@ public class BatchingService {
     private final TripRepository tripRepository;
     private final BatchPlanner batchPlanner;
     private final jakarta.persistence.EntityManager entityManager;
+    private final MeterRegistry meterRegistry;
 
-    public BatchingService(BookingRepository bookingRepository, TripRepository tripRepository, BatchPlanner batchPlanner, jakarta.persistence.EntityManager entityManager) {
+    public BatchingService(BookingRepository bookingRepository, TripRepository tripRepository, BatchPlanner batchPlanner, jakarta.persistence.EntityManager entityManager, MeterRegistry meterRegistry) {
         this.bookingRepository = bookingRepository;
         this.tripRepository = tripRepository;
         this.batchPlanner = batchPlanner;
         this.entityManager = entityManager;
+        this.meterRegistry = meterRegistry;
     }
 
     public record BatchingResult(int bookingsConsidered, int tripsFormed, int bookingsLeftPending) {}
@@ -42,6 +46,8 @@ public class BatchingService {
      */
     @Transactional
     public BatchingResult formBatches() {
+        Timer.Sample timerSample = Timer.start(meterRegistry);
+        try {
         // 1. Claim eligible pending bookings exclusively for this transaction
         List<Booking> pendingBookings = bookingRepository.findPendingBookingsForBatching();
         
@@ -68,10 +74,15 @@ public class BatchingService {
         
         int pendingRemaining = pendingBookings.size() - assignedCount;
         
+        meterRegistry.counter("batching.trips_formed").increment(trips.size());
+        
         log.info("Batching cycle completed: considered={}, tripsFormed={}, assigned={}, leftPending={}",
                 pendingBookings.size(), trips.size(), assignedCount, pendingRemaining);
                 
         return new BatchingResult(pendingBookings.size(), trips.size(), pendingRemaining);
+        } finally {
+            timerSample.stop(meterRegistry.timer("batching.duration"));
+        }
     }
 
     /**
@@ -118,11 +129,15 @@ public class BatchingService {
                     booking.setTripId(lockedTrip.getId());
                     booking.setStatus(BookingStatus.CONFIRMED);
                     bookingRepository.save(booking);
+                    meterRegistry.counter("batching.late_insertion", "result", "success").increment();
+                    log.info("Late insertion result: success for booking");
                     return true;
                 }
             }
         }
 
+        meterRegistry.counter("batching.late_insertion", "result", "failure").increment();
+        log.info("Late insertion result: failure for booking");
         return false;
     }
 }

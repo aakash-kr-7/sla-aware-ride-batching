@@ -23,9 +23,14 @@ import com.ridebatching.booking.exception.BookingNotFoundException;
 import com.ridebatching.batching.BatchingWindow;
 import com.ridebatching.batching.BatchingService;
 import com.ridebatching.config.AppProperties;
+import io.micrometer.core.instrument.MeterRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 public class BookingService {
+
+    private static final Logger log = LoggerFactory.getLogger(BookingService.class);
 
     private final BookingRepository bookingRepository;
     private final EmployeeRepository employeeRepository;
@@ -34,6 +39,7 @@ public class BookingService {
     private final AppProperties appProperties;
     private final TripRepository tripRepository;
     private final BatchingService batchingService;
+    private final MeterRegistry meterRegistry;
 
     public BookingService(BookingRepository bookingRepository,
                           EmployeeRepository employeeRepository,
@@ -41,7 +47,8 @@ public class BookingService {
                           DeduplicationKeyGenerator deduplicationKeyGenerator,
                           AppProperties appProperties,
                           TripRepository tripRepository,
-                          @org.springframework.context.annotation.Lazy BatchingService batchingService) {
+                          @org.springframework.context.annotation.Lazy BatchingService batchingService,
+                          MeterRegistry meterRegistry) {
         this.bookingRepository = bookingRepository;
         this.employeeRepository = employeeRepository;
         this.serviceabilityService = serviceabilityService;
@@ -49,17 +56,22 @@ public class BookingService {
         this.appProperties = appProperties;
         this.tripRepository = tripRepository;
         this.batchingService = batchingService;
+        this.meterRegistry = meterRegistry;
     }
 
     // Removed @Transactional to prevent DataIntegrityViolationException from marking 
     // an outer transaction (if any) as rollback-only. We handle the duplicate race 
     // condition natively.
     public BookingResponse createBooking(UUID employeeId, BookingRequest request) {
+        meterRegistry.counter("bookings.requests").increment();
+
         GeoPoint pickup = new GeoPoint(request.pickup().latitude(), request.pickup().longitude());
         GeoPoint dropoff = new GeoPoint(request.dropoff().latitude(), request.dropoff().longitude());
 
         Optional<ServiceableZone> zone = serviceabilityService.findZoneFor(pickup);
         if (zone.isEmpty()) {
+            meterRegistry.counter("bookings.serviceability_rejections").increment();
+            log.warn("Booking rejected as non-serviceable: pickup location outside active zones");
             throw new UnserviceableZoneException(
                 String.format("Pickup location [%.4f, %.4f] is outside all active serviceable zones.",
                     pickup.latitude(), pickup.longitude())
@@ -95,7 +107,8 @@ public class BookingService {
             saved = bookingRepository.saveAndFlush(booking);
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
             // Uniqueness race: another thread inserted the same booking.
-            // Safe to resolve to the existing row.
+            meterRegistry.counter("bookings.deduplication_hits").increment();
+            log.info("Deduplication hit for employee dedup key");
             return bookingRepository.findByDeduplicationKey(dedupKey)
                 .map(this::mapToResponse)
                 .orElseThrow(() -> new IllegalStateException("Duplicate booking detected but could not be retrieved", e));
@@ -131,6 +144,9 @@ public class BookingService {
                     .orElseThrow(() -> new IllegalStateException("Trip not found for booking"));
             trip.removeBooking(bookingId);
             tripRepository.save(trip);
+            
+            meterRegistry.counter("bookings.cancellation_replans").increment();
+            log.info("Cancellation replan: Removed booking from existing trip");
         }
         
         Booking saved = bookingRepository.save(booking);

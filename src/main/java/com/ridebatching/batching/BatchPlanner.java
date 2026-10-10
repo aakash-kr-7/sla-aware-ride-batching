@@ -18,22 +18,30 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import io.micrometer.core.instrument.MeterRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class BatchPlanner {
+
+    private static final Logger log = LoggerFactory.getLogger(BatchPlanner.class);
 
     private final RouteInsertionPlanner routeInsertionPlanner;
     private final TripFeasibilityEvaluator feasibilityEvaluator;
     private final TravelTimeEstimator travelTimeEstimator;
     private final int defaultVehicleCapacity;
+    private final MeterRegistry meterRegistry;
 
     public BatchPlanner(RouteInsertionPlanner routeInsertionPlanner,
                         TripFeasibilityEvaluator feasibilityEvaluator,
                         TravelTimeEstimator travelTimeEstimator,
-                        @Value("${app.fleet.default-vehicle-capacity:4}") int defaultVehicleCapacity) {
+                        @Value("${app.fleet.default-vehicle-capacity:4}") int defaultVehicleCapacity,
+                        MeterRegistry meterRegistry) {
         this.routeInsertionPlanner = routeInsertionPlanner;
         this.feasibilityEvaluator = feasibilityEvaluator;
         this.travelTimeEstimator = travelTimeEstimator;
         this.defaultVehicleCapacity = defaultVehicleCapacity;
+        this.meterRegistry = meterRegistry;
     }
     
     public int getDefaultVehicleCapacity() {
@@ -67,6 +75,11 @@ public class BatchPlanner {
                 bestInsertion.trip.assignRoute(bestInsertion.route);
                 booking.setTripId(bestInsertion.trip.getId());
             } else {
+                if (!trips.isEmpty()) {
+                    meterRegistry.counter("batching.trip_splits").increment();
+                    log.info("Trip split: booking could not fit into existing candidate trips, starting a new trip");
+                }
+                
                 Trip newTrip = new Trip(UUID.randomUUID(), routeStartTime, Instant.now());
                 List<TripStop> initialRoute = routeInsertionPlanner.planBestInsertion(Collections.emptyList(), booking);
                 // Note: feasibility of single request in an empty trip is assumed true if capacity >= 1 and detours=0.

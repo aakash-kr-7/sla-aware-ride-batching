@@ -19,7 +19,7 @@ This document tracks the actual state of the repository, reflecting features tha
 | cancellation           | D        | I           | T      | Pending bookings; trip reassessment/cancel on empty |
 | authentication         | D        | I           | T      | JWT, UserAccounts, Roles (EMPLOYEE, ADMIN, APPROVER) |
 | authorization          | D        | I           | T      | Server-side ownership enforcement & SLA Escalations |
-| observability          | —        | —           | —      | |
+| observability          | D        | I           | T      | Micrometer metrics, structured MDC logging, Actuator health |
 | caching                | —        | —           | —      | |
 | failure handling       | —        | —           | —      | |
 
