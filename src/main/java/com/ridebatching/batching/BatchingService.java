@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 public class BatchingService {
@@ -21,11 +22,13 @@ public class BatchingService {
     private final BookingRepository bookingRepository;
     private final TripRepository tripRepository;
     private final BatchPlanner batchPlanner;
+    private final jakarta.persistence.EntityManager entityManager;
 
-    public BatchingService(BookingRepository bookingRepository, TripRepository tripRepository, BatchPlanner batchPlanner) {
+    public BatchingService(BookingRepository bookingRepository, TripRepository tripRepository, BatchPlanner batchPlanner, jakarta.persistence.EntityManager entityManager) {
         this.bookingRepository = bookingRepository;
         this.tripRepository = tripRepository;
         this.batchPlanner = batchPlanner;
+        this.entityManager = entityManager;
     }
 
     public record BatchingResult(int bookingsConsidered, int tripsFormed, int bookingsLeftPending) {}
@@ -69,5 +72,57 @@ public class BatchingService {
                 pendingBookings.size(), trips.size(), assignedCount, pendingRemaining);
                 
         return new BatchingResult(pendingBookings.size(), trips.size(), pendingRemaining);
+    }
+
+    /**
+     * Attempts to insert a late-arriving booking into an existing planned trip.
+     */
+    @Transactional
+    public boolean attemptLateInsertion(Booking booking) {
+        // Find existing planned trips
+        List<Trip> candidateTrips = tripRepository.findByStatusIn(List.of(com.ridebatching.trip.TripStatus.PLANNED));
+        if (candidateTrips.isEmpty()) {
+            return false;
+        }
+
+        List<UUID> bookingIds = candidateTrips.stream()
+                .flatMap(t -> t.getStops().stream())
+                .map(com.ridebatching.trip.TripStop::getBookingId)
+                .toList();
+
+        java.util.Map<UUID, Booking> currentBookings = new java.util.HashMap<>();
+        for (Booking b : bookingRepository.findAllById(bookingIds)) {
+            currentBookings.put(b.getId(), b);
+        }
+        currentBookings.put(booking.getId(), booking);
+
+        com.ridebatching.fleet.Vehicle dummyVehicle = new com.ridebatching.fleet.Vehicle(UUID.randomUUID(), batchPlanner.getDefaultVehicleCapacity());
+
+        BatchPlanner.InsertionResult initialResult = batchPlanner.findBestTripForInsertion(
+                candidateTrips, booking, currentBookings, Instant.now(), dummyVehicle);
+
+        if (initialResult != null) {
+            Trip lockedTrip = tripRepository.findByIdForUpdate(initialResult.trip().getId()).orElse(null);
+            if (lockedTrip != null && lockedTrip.getStatus() == com.ridebatching.trip.TripStatus.PLANNED) {
+                // Refresh entity to clear L1 cache state and load latest stops from DB
+                entityManager.refresh(lockedTrip);
+                
+                // Re-verify after locking
+                BatchPlanner.InsertionResult finalResult = batchPlanner.findBestTripForInsertion(
+                        List.of(lockedTrip), booking, currentBookings, Instant.now(), dummyVehicle);
+                
+                if (finalResult != null) {
+                    lockedTrip.assignRoute(finalResult.route());
+                    tripRepository.save(lockedTrip);
+                    
+                    booking.setTripId(lockedTrip.getId());
+                    booking.setStatus(BookingStatus.CONFIRMED);
+                    bookingRepository.save(booking);
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 }

@@ -15,8 +15,8 @@ This document tracks the actual state of the repository, reflecting features tha
 | SLA                    | D        | I           | T      | Implemented via TripFeasibilityEvaluator |
 | detour                 | D        | I           | T      | Relative and absolute thresholds enforced |
 | driver dispatch        | D        | I           | T      | Ranking, offers, and concurrent acceptance |
-| late insertion         | —        | —           | —      | |
-| cancellation           | D        | I           | T      | Pending booking cancellation; assigned trips throw unsupported |
+| late insertion         | D        | I           | T      | Concurrency safe, respects capacity and SLA |
+| cancellation           | D        | I           | T      | Pending bookings; trip reassessment/cancel on empty |
 | authentication         | —        | —           | —      | |
 | observability          | —        | —           | —      | |
 | caching                | —        | —           | —      | |

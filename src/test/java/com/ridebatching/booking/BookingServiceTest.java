@@ -41,6 +41,9 @@ class BookingServiceTest {
     private DeduplicationKeyGenerator deduplicationKeyGenerator;
 
     @Mock
+    private com.ridebatching.trip.TripRepository tripRepository;
+
+    @Mock
     private com.ridebatching.config.AppProperties appProperties;
 
     @InjectMocks
@@ -109,20 +112,28 @@ class BookingServiceTest {
     }
 
     @Test
-    void shouldThrowExceptionWhenCancellingAssignedBooking() {
+    void shouldRemoveBookingFromTrip() {
         UUID employeeId = UUID.randomUUID();
         UUID bookingId = UUID.randomUUID();
+        UUID tripId = UUID.randomUUID();
         Employee employee = new Employee(employeeId, "EMP-100", "Alice", "alice@example.com");
         
         Booking booking = new Booking(bookingId, employee, new GeoPoint(0,0), new GeoPoint(0,0), 
             java.time.Instant.now(), BookingStatus.CONFIRMED, java.time.Instant.now(), java.time.Instant.now(), "key");
-        booking.setTripId(UUID.randomUUID());
+        booking.setTripId(tripId);
             
+        com.ridebatching.trip.Trip trip = mock(com.ridebatching.trip.Trip.class);
+        
         when(bookingRepository.findById(bookingId)).thenReturn(Optional.of(booking));
+        when(tripRepository.findById(tripId)).thenReturn(Optional.of(trip));
+        when(bookingRepository.save(any(Booking.class))).thenAnswer(i -> i.getArguments()[0]);
 
-        UnsupportedOperationException exception = assertThrows(UnsupportedOperationException.class, 
-            () -> bookingService.cancelBooking(employeeId, bookingId));
-        assertEquals("Trip replanning for cancelled bookings is not yet supported.", exception.getMessage());
+        BookingResponse response = bookingService.cancelBooking(employeeId, bookingId);
+
+        assertEquals(BookingStatus.CANCELLED, response.status());
+        verify(trip).removeBooking(bookingId);
+        verify(tripRepository).save(trip);
+        verify(bookingRepository).save(booking);
     }
 
     @Test

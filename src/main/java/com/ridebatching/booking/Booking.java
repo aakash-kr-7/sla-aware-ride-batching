@@ -91,10 +91,6 @@ public class Booking {
             throw new IllegalStateException("Booking cannot be cancelled from status: " + this.status);
         }
         
-        if (this.tripId != null) {
-            throw new UnsupportedOperationException("Trip replanning for cancelled bookings is not yet supported.");
-        }
-        
         this.status = BookingStatus.CANCELLED;
     }
 

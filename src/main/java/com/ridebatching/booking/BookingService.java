@@ -5,6 +5,8 @@ import com.ridebatching.booking.dto.BookingResponse;
 import com.ridebatching.booking.dto.GeoPointDto;
 import com.ridebatching.booking.exception.UnserviceableZoneException;
 import com.ridebatching.geo.GeoPoint;
+import com.ridebatching.trip.Trip;
+import com.ridebatching.trip.TripRepository;
 import com.ridebatching.zone.ServiceabilityService;
 import com.ridebatching.zone.ServiceableZone;
 import org.springframework.stereotype.Service;
@@ -19,6 +21,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import com.ridebatching.booking.exception.BookingNotFoundException;
 import com.ridebatching.batching.BatchingWindow;
+import com.ridebatching.batching.BatchingService;
 import com.ridebatching.config.AppProperties;
 
 @Service
@@ -29,17 +32,23 @@ public class BookingService {
     private final ServiceabilityService serviceabilityService;
     private final DeduplicationKeyGenerator deduplicationKeyGenerator;
     private final AppProperties appProperties;
+    private final TripRepository tripRepository;
+    private final BatchingService batchingService;
 
     public BookingService(BookingRepository bookingRepository,
                           EmployeeRepository employeeRepository,
                           ServiceabilityService serviceabilityService,
                           DeduplicationKeyGenerator deduplicationKeyGenerator,
-                          AppProperties appProperties) {
+                          AppProperties appProperties,
+                          TripRepository tripRepository,
+                          @org.springframework.context.annotation.Lazy BatchingService batchingService) {
         this.bookingRepository = bookingRepository;
         this.employeeRepository = employeeRepository;
         this.serviceabilityService = serviceabilityService;
         this.deduplicationKeyGenerator = deduplicationKeyGenerator;
         this.appProperties = appProperties;
+        this.tripRepository = tripRepository;
+        this.batchingService = batchingService;
     }
 
     // Removed @Transactional to prevent DataIntegrityViolationException from marking 
@@ -79,11 +88,11 @@ public class BookingService {
             dedupKey
         );
 
+        Booking saved;
         try {
             // Using saveAndFlush so constraint violations are thrown immediately here
             // rather than deferred to transaction commit.
-            Booking saved = bookingRepository.saveAndFlush(booking);
-            return mapToResponse(saved);
+            saved = bookingRepository.saveAndFlush(booking);
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
             // Uniqueness race: another thread inserted the same booking.
             // Safe to resolve to the existing row.
@@ -91,6 +100,12 @@ public class BookingService {
                 .map(this::mapToResponse)
                 .orElseThrow(() -> new IllegalStateException("Duplicate booking detected but could not be retrieved", e));
         }
+
+        boolean lateInserted = batchingService.attemptLateInsertion(saved);
+        if (lateInserted) {
+            saved = bookingRepository.findById(saved.getId()).orElse(saved);
+        }
+        return mapToResponse(saved);
     }
 
     @Transactional(readOnly = true)
@@ -110,6 +125,14 @@ public class BookingService {
         }
         
         booking.cancel();
+        
+        if (booking.getTripId() != null) {
+            Trip trip = tripRepository.findByIdForUpdate(booking.getTripId())
+                    .orElseThrow(() -> new IllegalStateException("Trip not found for booking"));
+            trip.removeBooking(bookingId);
+            tripRepository.save(trip);
+        }
+        
         Booking saved = bookingRepository.save(booking);
         return mapToResponse(saved);
     }

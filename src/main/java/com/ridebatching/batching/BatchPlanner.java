@@ -35,6 +35,10 @@ public class BatchPlanner {
         this.travelTimeEstimator = travelTimeEstimator;
         this.defaultVehicleCapacity = defaultVehicleCapacity;
     }
+    
+    public int getDefaultVehicleCapacity() {
+        return defaultVehicleCapacity;
+    }
 
     /**
      * Plans a batch of trips for a given cluster of bookings using a deterministic greedy approach.
@@ -57,46 +61,11 @@ public class BatchPlanner {
         Vehicle dummyVehicle = new Vehicle(UUID.randomUUID(), defaultVehicleCapacity);
 
         for (Booking booking : sortedBookings) {
-            Trip bestTrip = null;
-            List<TripStop> bestRoute = null;
-            Duration bestIncrementalCost = null;
+            InsertionResult bestInsertion = findBestTripForInsertion(trips, booking, currentBookings, routeStartTime, dummyVehicle);
 
-            for (Trip candidateTrip : trips) {
-                List<TripStop> candidateRoute = routeInsertionPlanner.planBestInsertion(candidateTrip.getStops(), booking);
-                if (candidateRoute.isEmpty()) {
-                    continue;
-                }
-
-                Map<UUID, Booking> routeBookings = new HashMap<>();
-                for (TripStop stop : candidateRoute) {
-                    routeBookings.put(stop.getBookingId(), currentBookings.get(stop.getBookingId()));
-                }
-
-                TripFeasibilityEvaluator.EvaluationTrace trace = feasibilityEvaluator.evaluate(
-                        candidateRoute, routeBookings, dummyVehicle, routeStartTime, booking.getId());
-
-                if (trace.isFeasible()) {
-                    Duration currentCost = calculateRouteCost(candidateTrip.getStops());
-                    Duration newCost = calculateRouteCost(candidateRoute);
-                    Duration incrementalCost = newCost.minus(currentCost);
-
-                    if (bestIncrementalCost == null || incrementalCost.compareTo(bestIncrementalCost) < 0) {
-                        bestIncrementalCost = incrementalCost;
-                        bestTrip = candidateTrip;
-                        bestRoute = candidateRoute;
-                    } else if (incrementalCost.equals(bestIncrementalCost)) {
-                        // Deterministic tie-breaking using Trip ID
-                        if (candidateTrip.getId().compareTo(bestTrip.getId()) < 0) {
-                            bestTrip = candidateTrip;
-                            bestRoute = candidateRoute;
-                        }
-                    }
-                }
-            }
-
-            if (bestTrip != null) {
-                bestTrip.assignRoute(bestRoute);
-                booking.setTripId(bestTrip.getId());
+            if (bestInsertion != null) {
+                bestInsertion.trip.assignRoute(bestInsertion.route);
+                booking.setTripId(bestInsertion.trip.getId());
             } else {
                 Trip newTrip = new Trip(UUID.randomUUID(), routeStartTime, Instant.now());
                 List<TripStop> initialRoute = routeInsertionPlanner.planBestInsertion(Collections.emptyList(), booking);
@@ -136,5 +105,51 @@ public class BatchPlanner {
             total = total.plus(travelTimeEstimator.estimateTravelTime(route.get(i).getLocation(), route.get(i + 1).getLocation()));
         }
         return total;
+    }
+    
+    public record InsertionResult(Trip trip, List<TripStop> route) {}
+    
+    public InsertionResult findBestTripForInsertion(List<Trip> candidateTrips, Booking booking, Map<UUID, Booking> allBookings, Instant routeStartTime, Vehicle vehicle) {
+        Trip bestTrip = null;
+        List<TripStop> bestRoute = null;
+        Duration bestIncrementalCost = null;
+
+        for (Trip candidateTrip : candidateTrips) {
+            List<TripStop> candidateRoute = routeInsertionPlanner.planBestInsertion(candidateTrip.getStops(), booking);
+            if (candidateRoute.isEmpty()) {
+                continue;
+            }
+
+            Map<UUID, Booking> routeBookings = new HashMap<>();
+            for (TripStop stop : candidateRoute) {
+                routeBookings.put(stop.getBookingId(), allBookings.get(stop.getBookingId()));
+            }
+
+            TripFeasibilityEvaluator.EvaluationTrace trace = feasibilityEvaluator.evaluate(
+                    candidateRoute, routeBookings, vehicle, routeStartTime, booking.getId());
+
+            if (trace.isFeasible()) {
+                Duration currentCost = calculateRouteCost(candidateTrip.getStops());
+                Duration newCost = calculateRouteCost(candidateRoute);
+                Duration incrementalCost = newCost.minus(currentCost);
+
+                if (bestIncrementalCost == null || incrementalCost.compareTo(bestIncrementalCost) < 0) {
+                    bestIncrementalCost = incrementalCost;
+                    bestTrip = candidateTrip;
+                    bestRoute = candidateRoute;
+                } else if (incrementalCost.equals(bestIncrementalCost)) {
+                    // Deterministic tie-breaking using Trip ID
+                    if (candidateTrip.getId().compareTo(bestTrip.getId()) < 0) {
+                        bestTrip = candidateTrip;
+                        bestRoute = candidateRoute;
+                    }
+                }
+            }
+        }
+        
+        if (bestTrip != null) {
+            return new InsertionResult(bestTrip, bestRoute);
+        }
+        return null;
     }
 }

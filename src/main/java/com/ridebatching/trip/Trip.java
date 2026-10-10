@@ -94,6 +94,23 @@ public class Trip {
         this.updatedAt = Instant.now();
     }
 
+    public void removeBooking(UUID bookingId) {
+        List<TripStop> remainingStops = new ArrayList<>();
+        for (TripStop stop : this.stops) {
+            if (!stop.getBookingId().equals(bookingId)) {
+                remainingStops.add(stop);
+            }
+        }
+        
+        if (remainingStops.isEmpty()) {
+            this.status = TripStatus.CANCELLED;
+            this.stops.clear();
+            this.updatedAt = Instant.now();
+        } else {
+            assignRoute(remainingStops);
+        }
+    }
+
     private void validatePickupBeforeDropoff(List<TripStop> route) {
         Set<UUID> seenPickups = new HashSet<>();
         Set<UUID> seenDropoffs = new HashSet<>();
