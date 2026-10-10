@@ -140,16 +140,31 @@
                     <groupId>org.openjdk.jmh</groupId>
                     <artifactId>jmh-core</artifactId>
                     <version>1.37</version>
+                    <scope>test</scope>
                 </dependency>
                 <dependency>
                     <groupId>org.openjdk.jmh</groupId>
                     <artifactId>jmh-generator-annprocess</artifactId>
                     <version>1.37</version>
-                    <scope>provided</scope>
+                    <scope>test</scope>
                 </dependency>
             </dependencies>
             <build>
                 <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <version>3.13.0</version>
+                        <configuration>
+                            <annotationProcessorPaths>
+                                <path>
+                                    <groupId>org.openjdk.jmh</groupId>
+                                    <artifactId>jmh-generator-annprocess</artifactId>
+                                    <version>1.37</version>
+                                </path>
+                            </annotationProcessorPaths>
+                        </configuration>
+                    </plugin>
                     <plugin>
                         <groupId>org.codehaus.mojo</groupId>
                         <artifactId>exec-maven-plugin</artifactId>
@@ -168,7 +183,6 @@
                                         <argument>-classpath</argument>
                                         <classpath/>
                                         <argument>org.openjdk.jmh.Main</argument>
-                                        <argument>.*</argument>
                                     </arguments>
                                 </configuration>
                             </execution>
