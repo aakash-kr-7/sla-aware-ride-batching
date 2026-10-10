@@ -15,8 +15,11 @@ import java.util.List;
  * This provides the limited capability for APPROVERs and ADMINs
  * to inspect open escalations where SLAs are becoming unsafe.
  */
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 @RestController
 @RequestMapping("/api/v1/escalations")
+@Tag(name = "Approver (Escalations)", description = "Endpoints for approvers to view and manage SLA escalations")
 public class SlaEscalationController {
 
     private final SlaEscalationRepository escalationRepository;

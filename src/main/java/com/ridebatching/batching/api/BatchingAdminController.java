@@ -7,8 +7,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.security.access.prepost.PreAuthorize;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 @RestController
 @RequestMapping("/api/admin/batching")
+@Tag(name = "Admin (Batching)", description = "Administrative endpoints for triggering and managing the batching process")
 public class BatchingAdminController {
 
     private final BatchingService batchingService;

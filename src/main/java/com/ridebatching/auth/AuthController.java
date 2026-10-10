@@ -14,8 +14,11 @@ import jakarta.validation.Valid;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 @RestController
 @RequestMapping("/auth")
+@Tag(name = "Authentication", description = "Endpoints for login and token generation")
 public class AuthController {
 
     private final AuthenticationManager authenticationManager;

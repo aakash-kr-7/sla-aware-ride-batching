@@ -20,8 +20,11 @@ import org.springframework.data.domain.Pageable;
 
 import java.util.UUID;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 @RestController
 @RequestMapping("/api/v1/bookings")
+@Tag(name = "Employee (Bookings)", description = "Endpoints for employees to create, list, and cancel their ride bookings")
 public class BookingController {
 
     private final BookingService bookingService;
