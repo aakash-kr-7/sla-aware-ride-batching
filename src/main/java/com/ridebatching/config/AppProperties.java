@@ -11,7 +11,7 @@ public record AppProperties(
     SlaProperties sla,
     GeoProperties geo
 ) {
-    public record BatchingProperties(int windowDurationMinutes) {}
+    public record BatchingProperties(int windowDurationMinutes, int maxBearingAngleDiffDegrees) {}
     public record SlaProperties(int pickupSlaMinutes) {}
     public record GeoProperties(int dedupCoordinatePrecision) {}
 }

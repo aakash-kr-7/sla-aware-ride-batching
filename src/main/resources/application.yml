@@ -30,6 +30,7 @@ management:
 app:
   batching:
     window-duration-minutes: 15
+    max-bearing-angle-diff-degrees: 45
   sla:
     pickup-sla-minutes: 20
   geo:

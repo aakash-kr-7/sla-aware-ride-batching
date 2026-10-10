@@ -56,7 +56,7 @@ class BookingServiceTest {
             .thenReturn("dummy-key");
         
         com.ridebatching.config.AppProperties.BatchingProperties batchingProps = 
-            new com.ridebatching.config.AppProperties.BatchingProperties(15);
+            new com.ridebatching.config.AppProperties.BatchingProperties(15, 45);
         when(appProperties.batching()).thenReturn(batchingProps);
 
         when(bookingRepository.saveAndFlush(any(Booking.class))).thenAnswer(i -> i.getArguments()[0]);
