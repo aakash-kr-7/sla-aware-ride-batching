@@ -35,6 +35,9 @@ class BookingServiceTest {
     @Mock
     private ServiceabilityService serviceabilityService;
 
+    @Mock
+    private DeduplicationKeyGenerator deduplicationKeyGenerator;
+
     @InjectMocks
     private BookingService bookingService;
 
@@ -46,8 +49,10 @@ class BookingServiceTest {
         when(employeeRepository.findById(employeeId)).thenReturn(Optional.of(employee));
         when(serviceabilityService.findZoneFor(any(GeoPoint.class)))
             .thenReturn(Optional.of(new ServiceableZone("HQ", 12.9716, 77.5946, 5000, true)));
+        when(deduplicationKeyGenerator.generateKey(any(), any(), any(), any()))
+            .thenReturn("dummy-key");
         
-        when(bookingRepository.save(any(Booking.class))).thenAnswer(i -> i.getArguments()[0]);
+        when(bookingRepository.saveAndFlush(any(Booking.class))).thenAnswer(i -> i.getArguments()[0]);
 
         BookingRequest request = new BookingRequest(
             new GeoPointDto(12.9716, 77.5946),

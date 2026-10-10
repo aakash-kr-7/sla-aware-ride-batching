@@ -38,6 +38,9 @@ public class Booking {
     
     private Instant pickupSlaDeadline;
     private Instant createdAt;
+    
+    @jakarta.persistence.Column(name = "deduplication_key", unique = true, nullable = false)
+    private String deduplicationKey;
 
     protected Booking() {
         // JPA required
@@ -46,7 +49,8 @@ public class Booking {
     public Booking(UUID id, Employee employee, 
                    GeoPoint pickup, GeoPoint dropoff, 
                    Instant slotTimestamp, BookingStatus status, 
-                   Instant pickupSlaDeadline, Instant createdAt) {
+                   Instant pickupSlaDeadline, Instant createdAt,
+                   String deduplicationKey) {
         this.id = id;
         this.employee = employee;
         this.pickupLatitude = pickup.latitude();
@@ -57,6 +61,7 @@ public class Booking {
         this.status = status;
         this.pickupSlaDeadline = pickupSlaDeadline;
         this.createdAt = createdAt;
+        this.deduplicationKey = deduplicationKey;
     }
 
     public UUID getId() { return id; }
@@ -75,6 +80,7 @@ public class Booking {
     public BookingStatus getStatus() { return status; }
     public Instant getPickupSlaDeadline() { return pickupSlaDeadline; }
     public Instant getCreatedAt() { return createdAt; }
+    public String getDeduplicationKey() { return deduplicationKey; }
 
     public void setTripId(UUID tripId) {
         this.tripId = tripId;

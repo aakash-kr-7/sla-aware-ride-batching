@@ -23,16 +23,21 @@ public class BookingService {
     private final BookingRepository bookingRepository;
     private final EmployeeRepository employeeRepository;
     private final ServiceabilityService serviceabilityService;
+    private final DeduplicationKeyGenerator deduplicationKeyGenerator;
 
     public BookingService(BookingRepository bookingRepository,
                           EmployeeRepository employeeRepository,
-                          ServiceabilityService serviceabilityService) {
+                          ServiceabilityService serviceabilityService,
+                          DeduplicationKeyGenerator deduplicationKeyGenerator) {
         this.bookingRepository = bookingRepository;
         this.employeeRepository = employeeRepository;
         this.serviceabilityService = serviceabilityService;
+        this.deduplicationKeyGenerator = deduplicationKeyGenerator;
     }
 
-    @Transactional
+    // Removed @Transactional to prevent DataIntegrityViolationException from marking 
+    // an outer transaction (if any) as rollback-only. We handle the duplicate race 
+    // condition natively.
     public BookingResponse createBooking(UUID employeeId, BookingRequest request) {
         GeoPoint pickup = new GeoPoint(request.pickup().latitude(), request.pickup().longitude());
         GeoPoint dropoff = new GeoPoint(request.dropoff().latitude(), request.dropoff().longitude());
@@ -52,6 +57,8 @@ public class BookingService {
         Instant slotTimestamp = normalizeTo15MinuteSlot(now);
         Instant slaDeadline = now.plus(20, ChronoUnit.MINUTES);
 
+        String dedupKey = deduplicationKeyGenerator.generateKey(employeeId, pickup, dropoff, slotTimestamp);
+
         Booking booking = new Booking(
             UUID.randomUUID(),
             employee,
@@ -60,11 +67,22 @@ public class BookingService {
             slotTimestamp,
             BookingStatus.PENDING,
             slaDeadline,
-            now
+            now,
+            dedupKey
         );
 
-        Booking saved = bookingRepository.save(booking);
-        return mapToResponse(saved);
+        try {
+            // Using saveAndFlush so constraint violations are thrown immediately here
+            // rather than deferred to transaction commit.
+            Booking saved = bookingRepository.saveAndFlush(booking);
+            return mapToResponse(saved);
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            // Uniqueness race: another thread inserted the same booking.
+            // Safe to resolve to the existing row.
+            return bookingRepository.findByDeduplicationKey(dedupKey)
+                .map(this::mapToResponse)
+                .orElseThrow(() -> new IllegalStateException("Duplicate booking detected but could not be retrieved", e));
+        }
     }
 
     private Instant normalizeTo15MinuteSlot(Instant time) {

@@ -20,6 +20,9 @@ class BookingPersistenceIntegrationTest extends AbstractPostgresIntegrationTest 
     @Autowired
     private BookingRepository bookingRepository;
 
+    @Autowired
+    private DeduplicationKeyGenerator keyGenerator;
+
     @Test
     void shouldSaveValidBooking() {
         Employee employee = new Employee(UUID.randomUUID(), "EMP-100", "Alice", "alice@example.com");
@@ -29,6 +32,8 @@ class BookingPersistenceIntegrationTest extends AbstractPostgresIntegrationTest 
         GeoPoint dropoff = new GeoPoint(12.9352, 77.6245);
         Instant now = Instant.now();
 
+        String dedupKey = keyGenerator.generateKey(employee.getId(), pickup, dropoff, now);
+
         Booking booking = new Booking(
                 UUID.randomUUID(),
                 employee,
@@ -37,7 +42,8 @@ class BookingPersistenceIntegrationTest extends AbstractPostgresIntegrationTest 
                 now,
                 BookingStatus.PENDING,
                 now.plusSeconds(20 * 60),
-                now
+                now,
+                dedupKey
         );
 
         Booking saved = bookingRepository.saveAndFlush(booking);
@@ -53,6 +59,8 @@ class BookingPersistenceIntegrationTest extends AbstractPostgresIntegrationTest 
         GeoPoint dropoff = new GeoPoint(12.9352, 77.6245);
         Instant slot = Instant.parse("2026-10-10T08:00:00Z");
 
+        String key1 = keyGenerator.generateKey(employee.getId(), pickup, dropoff, slot);
+        
         Booking booking1 = new Booking(
                 UUID.randomUUID(),
                 employee,
@@ -61,12 +69,15 @@ class BookingPersistenceIntegrationTest extends AbstractPostgresIntegrationTest 
                 slot,
                 BookingStatus.PENDING,
                 slot.plusSeconds(20 * 60),
-                Instant.now()
+                Instant.now(),
+                key1
         );
         bookingRepository.saveAndFlush(booking1);
 
         // Slightly different GPS coordinates that round to the same 4 decimal places
         GeoPoint duplicatedPickup = new GeoPoint(12.971649, 77.594601);
+        
+        String key2 = keyGenerator.generateKey(employee.getId(), duplicatedPickup, dropoff, slot);
         
         Booking booking2 = new Booking(
                 UUID.randomUUID(),
@@ -76,7 +87,8 @@ class BookingPersistenceIntegrationTest extends AbstractPostgresIntegrationTest 
                 slot,
                 BookingStatus.PENDING,
                 slot.plusSeconds(20 * 60),
-                Instant.now()
+                Instant.now(),
+                key2
         );
 
         // Should throw unique constraint violation due to idx_bookings_dedup

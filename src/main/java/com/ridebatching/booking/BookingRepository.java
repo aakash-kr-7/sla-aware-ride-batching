@@ -5,6 +5,9 @@ import org.springframework.stereotype.Repository;
 
 import java.util.UUID;
 
+import java.util.Optional;
+
 @Repository
 public interface BookingRepository extends JpaRepository<Booking, UUID> {
+    Optional<Booking> findByDeduplicationKey(String deduplicationKey);
 }
