@@ -1,5 +1,6 @@
 package com.ridebatching.auth;
 
+import com.ridebatching.AbstractPostgresIntegrationTest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ridebatching.booking.Booking;
 import com.ridebatching.booking.BookingRepository;
@@ -16,12 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -32,18 +28,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
-@Testcontainers
-class SecurityMethodIntegrationTest {
-
-    @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:15-alpine");
-
-    @DynamicPropertySource
-    static void configureProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", postgres::getJdbcUrl);
-        registry.add("spring.datasource.username", postgres::getUsername);
-        registry.add("spring.datasource.password", postgres::getPassword);
-    }
+class SecurityMethodIntegrationTest extends AbstractPostgresIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
@@ -78,11 +63,6 @@ class SecurityMethodIntegrationTest {
 
     @BeforeEach
     void setup() {
-        bookingRepository.deleteAll();
-        escalationRepository.deleteAll();
-        userAccountRepository.deleteAll();
-        employeeRepository.deleteAll();
-
         // Setup Employees
         Employee emp1 = new Employee(emp1Id, "E1", "Alice", "alice@test.com");
         Employee emp2 = new Employee(emp2Id, "E2", "Bob", "bob@test.com");

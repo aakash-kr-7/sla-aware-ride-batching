@@ -13,6 +13,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
  * definitions across integration test classes.
  */
 @SpringBootTest
+@org.springframework.test.context.ActiveProfiles("test")
 public abstract class AbstractPostgresIntegrationTest {
 
     @ServiceConnection
@@ -25,10 +26,15 @@ public abstract class AbstractPostgresIntegrationTest {
     @org.springframework.beans.factory.annotation.Autowired
     private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.cache.CacheManager cacheManager;
+
     @org.junit.jupiter.api.AfterEach
+    @org.junit.jupiter.api.BeforeEach
     protected void cleanupDatabase() {
         if (jdbcTemplate != null) {
-            jdbcTemplate.execute("TRUNCATE TABLE trip_stops, trips, bookings, employees, drivers, driver_offers CASCADE");
+            jdbcTemplate.execute("TRUNCATE TABLE trip_stops, trips, bookings, user_account, employees, drivers, driver_offers, serviceable_zones, sla_escalation CASCADE");
+            cacheManager.getCacheNames().forEach(name -> cacheManager.getCache(name).clear());
         }
     }
 }

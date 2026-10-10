@@ -1,37 +1,16 @@
 package com.ridebatching.zone;
 
+import com.ridebatching.AbstractPostgresIntegrationTest;
 import com.ridebatching.config.CacheConfig;
 import com.ridebatching.geo.GeoPoint;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.cache.Cache;
-import org.springframework.cache.CacheManager;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@SpringBootTest
-@Testcontainers
-class ServiceabilityCacheIntegrationTest {
-
-    @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:15-alpine");
-
-    @DynamicPropertySource
-    static void configureProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", postgres::getJdbcUrl);
-        registry.add("spring.datasource.username", postgres::getUsername);
-        registry.add("spring.datasource.password", postgres::getPassword);
-    }
+class ServiceabilityCacheIntegrationTest extends AbstractPostgresIntegrationTest {
 
     @Autowired
     private ServiceabilityService serviceabilityService;
@@ -40,25 +19,7 @@ class ServiceabilityCacheIntegrationTest {
     private ServiceableZoneRepository zoneRepository;
 
     @Autowired
-    private CacheManager cacheManager;
-
-    @Autowired
     private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
-
-    @BeforeEach
-    void setup() {
-        zoneRepository.deleteAll();
-        // Clear cache
-        Cache cache = cacheManager.getCache(CacheConfig.ACTIVE_ZONES_CACHE);
-        if (cache != null) {
-            cache.clear();
-        }
-    }
-    
-    @AfterEach
-    void tearDown() {
-        zoneRepository.deleteAll();
-    }
 
     @Test
     void testCacheHitAndEviction() {
@@ -69,9 +30,7 @@ class ServiceabilityCacheIntegrationTest {
         Optional<ServiceableZone> result1 = serviceabilityService.findZoneFor(testPoint);
         assertThat(result1).isEmpty();
         
-        // Create an active zone but bypass repository save so we can test the cache hit
-        // Wait, if we use SQL to insert it won't evict the cache.
-        // Let's just create through repository, which evicts the cache.
+        // Saving through the repository evicts the cached empty zone list.
         ServiceableZone newZone = new ServiceableZone("Zone A", 10.0, 10.0, 5000.0, true);
         zoneRepository.save(newZone); // This evicts cache
         

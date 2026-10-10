@@ -46,6 +46,13 @@ class BookingServiceTest {
     @Mock
     private com.ridebatching.config.AppProperties appProperties;
 
+    @Mock
+    private com.ridebatching.batching.BatchingService batchingService;
+
+    @org.mockito.Spy
+    private io.micrometer.core.instrument.simple.SimpleMeterRegistry meterRegistry =
+            new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+
     @InjectMocks
     private BookingService bookingService;
 
@@ -63,6 +70,7 @@ class BookingServiceTest {
         com.ridebatching.config.AppProperties.BatchingProperties batchingProps = 
             new com.ridebatching.config.AppProperties.BatchingProperties(15, 45);
         when(appProperties.batching()).thenReturn(batchingProps);
+        when(appProperties.sla()).thenReturn(new com.ridebatching.config.AppProperties.SlaProperties(25));
 
         when(bookingRepository.saveAndFlush(any(Booking.class))).thenAnswer(i -> i.getArguments()[0]);
 
@@ -77,6 +85,8 @@ class BookingServiceTest {
         assertEquals(BookingStatus.PENDING, response.status());
         assertNull(response.tripId());
         assertEquals(employeeId, response.employeeId());
+        assertEquals(java.time.Duration.ofMinutes(25),
+                java.time.Duration.between(response.createdAt(), response.pickupSlaDeadline()));
     }
 
     @Test
@@ -125,7 +135,7 @@ class BookingServiceTest {
         com.ridebatching.trip.Trip trip = mock(com.ridebatching.trip.Trip.class);
         
         when(bookingRepository.findById(bookingId)).thenReturn(Optional.of(booking));
-        when(tripRepository.findById(tripId)).thenReturn(Optional.of(trip));
+        when(tripRepository.findByIdForUpdate(tripId)).thenReturn(Optional.of(trip));
         when(bookingRepository.save(any(Booking.class))).thenAnswer(i -> i.getArguments()[0]);
 
         BookingResponse response = bookingService.cancelBooking(employeeId, bookingId);

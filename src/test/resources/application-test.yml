@@ -1,0 +1,7 @@
+# PostgreSQL connection details are supplied by Testcontainers.
+# Main configuration remains active; only signing material is test-specific.
+app:
+  security:
+    jwt:
+      # Test-only signing material, never loaded by the packaged application.
+      secret: test-only-jwt-signing-key-for-integration-tests-0123456789

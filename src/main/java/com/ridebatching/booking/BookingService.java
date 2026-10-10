@@ -14,7 +14,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
@@ -84,7 +83,7 @@ public class BookingService {
         Instant now = Instant.now();
         Duration windowDuration = Duration.ofMinutes(appProperties.batching().windowDurationMinutes());
         Instant slotTimestamp = BatchingWindow.forTime(now, windowDuration).start();
-        Instant slaDeadline = now.plus(20, ChronoUnit.MINUTES);
+        Instant slaDeadline = now.plus(Duration.ofMinutes(appProperties.sla().pickupSlaMinutes()));
 
         String dedupKey = deduplicationKeyGenerator.generateKey(employeeId, pickup, dropoff, slotTimestamp);
 

@@ -19,6 +19,7 @@ import com.ridebatching.AbstractPostgresIntegrationTest;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 
 @AutoConfigureMockMvc
+@org.springframework.security.test.context.support.WithMockUser(roles = "ADMIN")
 class BookingRetrievalIntegrationTest extends AbstractPostgresIntegrationTest {
 
     @Autowired

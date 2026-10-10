@@ -1,5 +1,6 @@
 package com.ridebatching.batching;
 
+import com.ridebatching.AbstractPostgresIntegrationTest;
 import com.ridebatching.booking.Booking;
 import com.ridebatching.booking.BookingRepository;
 import com.ridebatching.booking.BookingStatus;
@@ -8,18 +9,11 @@ import com.ridebatching.booking.EmployeeRepository;
 import com.ridebatching.geo.GeoPoint;
 import com.ridebatching.trip.Trip;
 import com.ridebatching.trip.TripRepository;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.SpyBean;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.time.Instant;
 import java.util.List;
@@ -28,19 +22,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-@SpringBootTest
-@Testcontainers
-class BatchingRollbackIntegrationTest {
-
-    @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:15-alpine");
-
-    @DynamicPropertySource
-    static void configureProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", postgres::getJdbcUrl);
-        registry.add("spring.datasource.username", postgres::getUsername);
-        registry.add("spring.datasource.password", postgres::getPassword);
-    }
+class BatchingRollbackIntegrationTest extends AbstractPostgresIntegrationTest {
 
     @Autowired
     private BatchingService batchingService;
@@ -58,19 +40,8 @@ class BatchingRollbackIntegrationTest {
 
     @BeforeEach
     void setup() {
-        bookingRepository.deleteAll();
-        tripRepository.deleteAll();
-        employeeRepository.deleteAll();
-
         Employee emp = new Employee(employeeId, "EMP_R", "Rollback", "rb@test.com");
         employeeRepository.save(emp);
-    }
-
-    @AfterEach
-    void tearDown() {
-        bookingRepository.deleteAll();
-        tripRepository.deleteAll();
-        employeeRepository.deleteAll();
     }
 
     @Test
@@ -100,7 +71,7 @@ class BatchingRollbackIntegrationTest {
         }
 
         // 4. Remove injected failure
-        Mockito.doCallRealMethod().when(tripRepository).saveAll(Mockito.anyIterable());
+        Mockito.reset(tripRepository);
 
         // 5. Assert later valid batching attempt proceeds correctly
         BatchingService.BatchingResult result = batchingService.formBatches();

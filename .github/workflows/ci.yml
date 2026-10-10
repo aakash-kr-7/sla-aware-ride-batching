@@ -24,8 +24,5 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
-      - name: Ensure Maven wrapper is executable
-        run: chmod +x mvnw
-
       - name: Build and verify with Maven
         run: ./mvnw --batch-mode clean verify

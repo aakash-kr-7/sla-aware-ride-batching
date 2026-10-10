@@ -35,10 +35,18 @@ class BatchingAdminControllerIntegrationTest extends AbstractPostgresIntegration
 
     private Employee testEmployee;
 
+    @Autowired
+    private com.ridebatching.auth.UserAccountRepository userAccountRepository;
+
+    @Autowired
+    private com.ridebatching.auth.JwtService jwtService;
+
     @BeforeEach
     void setUp() {
-        testEmployee = new Employee(UUID.randomUUID(), "Admin Test Employee", "admin@example.com", "AdminDept");
+        testEmployee = new Employee(UUID.randomUUID(), "EMP-ADMIN-TEST", "Admin Test Employee", "admin@example.com");
         employeeRepository.save(testEmployee);
+        userAccountRepository.save(new com.ridebatching.auth.UserAccount(UUID.randomUUID(),
+                "test-admin", "unused-test-password-hash", com.ridebatching.auth.Role.ADMIN, null));
     }
 
 
@@ -62,8 +70,11 @@ class BatchingAdminControllerIntegrationTest extends AbstractPostgresIntegration
         bookingRepository.saveAndFlush(booking);
 
         // When triggering the admin endpoint
+        org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+        headers.setBearerAuth(jwtService.generateToken("test-admin", com.ridebatching.auth.Role.ADMIN));
         ResponseEntity<BatchingService.BatchingResult> response = restTemplate.postForEntity(
-                "/api/admin/batching/trigger", null, BatchingService.BatchingResult.class);
+                "/api/admin/batching/trigger", new org.springframework.http.HttpEntity<>(headers),
+                BatchingService.BatchingResult.class);
 
         // Then it succeeds and reports the batched booking
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
