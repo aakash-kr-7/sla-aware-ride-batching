@@ -1,5 +1,17 @@
 # Batching Algorithm Benchmark Results
 
+Historical measurements recorded on 2026-10-10, before the repository hygiene pass and infeasible-solo fix. They have not been remeasured for the current revision. Do not treat them as current latency guarantees.
+
+## Reproduce
+
+JMH sources live in `src/benchmark/java`; the profile isolates its compiled/generated classes under `target/benchmark` so they do not leak into ordinary test discovery.
+
+```sh
+./mvnw -Pbenchmark -DskipTests verify
+```
+
+This compiles sources and runs the JMH harness, skipping ordinary JUnit execution for this benchmark-only command. Run normal correctness checks separately with `./mvnw test` and `./mvnw clean verify` (Windows: `./mvnw.cmd`). The harness uses 40% / 15-minute detour limits; runtime defaults are 100% / 30 minutes.
+
 ## Machine/JVM Context
 - **JVM**: JDK 17.0.12 (Java HotSpot 64-Bit Server VM, 17.0.12+8-LTS-286)
 - **OS**: Windows
@@ -34,13 +46,7 @@ xychart-beta
 ```
 
 ## Interpretation
-The results show a clear super-linear scaling trend aligned with our formal $O(N^2 \cdot S^3)$ algorithmic complexity analysis.
-- For small (10) and medium (50) clusters, the batching planner finishes practically instantly (under 11 ms).
-- At 100 requests, the latency is around 44 ms, still well within real-time latency budgets.
-- At 250 requests within a single batched window, the computation takes ~280 ms. While higher, this is completely acceptable because batch planning occurs as a background scheduling task over multi-minute intervals, rather than blocking an interactive API response.
-
-**Optimization Decision**: 
-Because performance remains under half a second even for massive 250-request spatial clusters, **the results do not currently justify deep optimization.** Adding complex geospatial partitioning grids (e.g. S2/H3 bins) before the clusterer or memoization at this stage would introduce significant architectural complexity with little practical benefit. We will explicitly retain the clearer, greedy-insertion implementation.
+The recorded averages increase with cluster size, consistent with the growing candidate search described in [algorithm analysis](../algorithm-analysis.md). Error margins are broad, especially for 250 requests. These synthetic, in-memory results do not establish an end-to-end latency budget, bounded route length or production capacity. They do not justify an architectural change during repository cleanup.
 
 ## Limitations
 1. **CPU/Platform Variance**: Tested locally on a single machine. Cloud deployments may have different single-thread performance characteristics.

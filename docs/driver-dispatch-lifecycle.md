@@ -1,80 +1,14 @@
 # Driver Dispatch Lifecycle
 
-## Sequence Diagram
+Dispatch is a transactional service with integration coverage. There is no driver HTTP API, outbound notification transport or automatic batching-to-dispatch flow.
 
-This diagram illustrates the process of dispatching a batched trip, handling driver rejections, cool-offs, and final acceptance. It highlights the transactional and concurrency boundaries.
+1. `dispatchTrip` filters offline/on-break/assigned drivers and recent trip-specific rejections, then ranks by Haversine distance and driver ID.
+2. Nearest eligible driver gets a persisted `OFFERED` record; no eligible driver returns empty. Trip is not marked `OFFERED`; multiple outstanding offers are possible.
+3. `rejectOffer` sets `REJECTED`. A later explicit dispatch call can select another driver; rejection does not automatically re-offer.
+4. `acceptOffer` updates offer, locks trip, assigns driver and records active trip. Assignment state and unique accepted-offer index prevent two winners for one trip.
 
-```mermaid
-sequenceDiagram
-    participant Batching as Batching Service
-    participant Dispatch as Dispatch Service
-    participant Policy as Eligibility & Ranker
-    participant DB as PostgreSQL
-    participant Driver1 as Driver 1 (Near)
-    participant Driver2 as Driver 2 (Far)
+Offer transitions: `OFFERED -> ACCEPTED / REJECTED / EXPIRED`. `expire()` has no automatic timer; offers store created/updated times, not deadlines. Cool-off is five minutes, compared to offer creation time; trip changes do not reset history.
 
-    Batching->>Dispatch: batched trip ready (Status: PLANNED)
-    
-    rect rgb(240, 248, 255)
-        note right of Dispatch: Transaction: dispatchTrip
-        Dispatch->>DB: fetch all drivers
-        Dispatch->>Policy: evaluate eligibility & cool-off
-        Policy-->>Dispatch: eligible drivers list
-        Dispatch->>Policy: rank by proximity
-        Policy-->>Dispatch: Driver 1, Driver 2
-        Dispatch->>DB: save DriverOffer (Status: OFFERED, Driver: Driver 1)
-    end
-    
-    Dispatch-->>Driver1: send offer
-    
-    Driver1->>Dispatch: rejectOffer
-    rect rgb(255, 240, 240)
-        note right of Dispatch: Transaction: rejectOffer
-        Dispatch->>DB: update DriverOffer (Status: REJECTED)
-    end
-    
-    note over Dispatch,Driver1: Driver 1 enters Cool-Off period for this trip
-    
-    Dispatch->>Dispatch: trigger next dispatch cycle
-    
-    rect rgb(240, 248, 255)
-        note right of Dispatch: Transaction: dispatchTrip
-        Dispatch->>DB: fetch all drivers
-        Dispatch->>Policy: evaluate eligibility & cool-off
-        note over Policy: Driver 1 is excluded (cool-off)
-        Policy-->>Dispatch: eligible drivers list
-        Dispatch->>Policy: rank by proximity
-        Policy-->>Dispatch: Driver 2
-        Dispatch->>DB: save DriverOffer (Status: OFFERED, Driver: Driver 2)
-    end
-    
-    Dispatch-->>Driver2: send offer
-    
-    Driver2->>Dispatch: acceptOffer
-    rect rgb(240, 255, 240)
-        note right of Dispatch: Transaction: acceptOffer
-        Dispatch->>DB: update DriverOffer (Status: ACCEPTED)
-        note right of DB: PESSIMISTIC_WRITE Lock on Trip
-        Dispatch->>DB: SELECT * FROM trip WHERE id = ? FOR UPDATE
-        Dispatch->>DB: update Trip (Status: DISPATCHED)
-        Dispatch->>DB: update Driver (Status: ON_TRIP)
-    end
-```
+Assigned driver status remains `AVAILABLE`; eligibility also checks active trip ID. Completion has no execution API. Dispatch does not compare driver capacity to route occupancy.
 
-## DriverOffer State Diagram
-
-The `DriverOffer` tracks the lifecycle of an offer made to a driver for a specific trip. 
-It ensures that an offer can only be acted upon if it is in a valid state.
-
-```mermaid
-stateDiagram-v2
-    [*] --> OFFERED : Created
-
-    OFFERED --> ACCEPTED : accept()
-    OFFERED --> REJECTED : reject()
-    OFFERED --> EXPIRED : timeout() / expire()
-
-    ACCEPTED --> [*]
-    REJECTED --> [*]
-    EXPIRED --> [*]
-```
+See [assumptions](assumptions.md), [domain model](domain-model.md), [failure limits](failure-modes.md).

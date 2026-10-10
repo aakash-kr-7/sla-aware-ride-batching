@@ -1,23 +1,29 @@
-# Business Edge-Case Test Matrix
+# Test Coverage and Gaps
 
-This matrix maps business edge cases to their corresponding automated tests.
+Paths below are relative to `src/test/java/com/ridebatching`. Component tests do not prove runtime wiring. Full-application integration tests share PostgreSQL 16 through `AbstractPostgresIntegrationTest`; the account JPA slice has its own container. DB/cache state is cleared between application tests.
 
-| Scenario | Invariant | Test type | Existing test | Gap |
-| --- | --- | --- | --- | --- |
-| Duplicate tap | A single user cannot create multiple identical bookings in a short window. | Unit/Integration | `TripFeasibilityEvaluatorTest.shouldRejectWhenStructuralCheckFails_DuplicatePickup`, `BookingPersistenceIntegrationTest` | No gap |
-| Concurrent duplicate | A user rapidly tapping 'book' must not result in multiple database rows. | Integration | `ConcurrentBatchingIntegrationTest.shouldHandleConcurrentBatchingAttemptsWithoutDuplicates` | No gap |
-| Serviceable-zone boundary | Pickups/dropoffs outside geofenced zones must be rejected immediately. | Unit/Integration | `ServiceableZoneIntegrationTest` | No gap |
-| Batching-window boundary | Bookings must only be batched with others in the same time window. | Unit | `BatchingWindowTest` | No gap |
-| Direction 0°/360° wrap-around | Trajectories straddling North (359° and 1°) must cluster together correctly. | Unit | `BearingTest` | No gap |
-| Capacity exact/full/overflow | A trip cannot exceed physical vehicle seats (e.g. 5 passengers in a 4-seater). | Unit/Integration | `BatchPlannerAcceptanceTest.shouldSplitFiveCompatibleRequestsIntoTwoTripsDueToCapacity`, `TripMutationConcurrencyIntegrationTest` | No gap |
-| SLA exact boundary | A detour or late insertion must not cause an existing rider to miss their SLA by even 1 ms. | Unit | `PickupSlaConstraintTest` | No gap |
-| Detour boundary | Detours cannot exceed the absolute and relative max bounds for any passenger. | Unit | `DetourConstraintTest` | No gap |
-| Five requests/four seats | Exactly 5 compatible requests must split into exactly 2 trips. | Unit | `BatchPlannerAcceptanceTest` | No gap |
-| Driver break | A driver on break cannot be offered a trip. | Unit/Integration | `DriverEligibilityPolicyTest`, `DriverPersistenceIntegrationTest` | No gap |
-| Driver rejection cooldown | A driver who rejected an offer must not receive the same trip again inside the cool-off period. | Integration | `DispatchIntegrationTest.rejectedDriverExcludedInsideCoolOff` | No gap |
-| Competing driver acceptances | If multiple drivers are offered trips simultaneously, only one driver can claim a given trip. | Integration | `DispatchIntegrationTest.concurrentAcceptanceOnlyAllowsOneWinner` | No gap |
-| Late insertion | New bookings can be inserted into an ongoing trip without violating SLA/Capacity. | Integration | `LateBookingInsertionIntegrationTest` | No gap |
-| Cancellation isolation | Cancelling a booking must not cancel the entire trip for other riders. | Integration | `BookingCancellationIntegrationTest` | No gap |
-| Concurrent trip mutation | Multiple late insertions processed simultaneously must not overfill a trip. | Integration | `TripMutationConcurrencyIntegrationTest` | No gap |
-| Authorization ownership | A user cannot view or cancel another user's booking. | Integration | `SecurityMethodIntegrationTest` | No gap |
-| Transaction rollback | A failed batching operation must release all pessimistic locks. | Integration | `BatchingRollbackIntegrationTest` | No gap |
+| Scenario | Tests | Boundary/gap |
+| --- | --- | --- |
+| Dedup key/uniqueness | booking/DeduplicationKeyGeneratorTest, booking/BookingPersistenceIntegrationTest | Normalization and DB constraint; cancellation/rebooking lookup needs coverage |
+| Concurrent double submit | booking/BookingConcurrencyIntegrationTest | Ten callers produce one row and one ID |
+| Serviceability | zone/ServiceabilityServiceTest, zone/ServiceableZoneIntegrationTest, booking/api/BookingControllerTest | Radius/overlap/ties, DB bounds, HTTP rejection; no dropoff check |
+| Window | batching/BatchingWindowTest | Standalone boundary/selection; runtime integration absent |
+| Clustering | batching/RequestClustererTest, geo/BearingTest | Zone/leader bearing and wrap-around; runtime integration absent |
+| Capacity/split | batching/constraint/CapacityConstraintTest, batching/BatchPlannerAcceptanceTest | Exact/overflow and five riders/four seats |
+| SLA | batching/constraint/PickupSlaConstraintTest, batching/BatchPlannerAcceptanceTest | Exact boundary, one second late, insertion rejection, expired solo stays pending; no driver approach |
+| Configured SLA | booking/BookingServiceTest | Deadline respects non-default duration |
+| Detour | batching/constraint/DetourConstraintTest, batching/evaluator/TripFeasibilityEvaluatorTest | Relative/absolute thresholds and harmed rider |
+| Routes | trip/TripTest, trip/RouteInsertionPlannerTest, batching/RoutePlannerInvariantTest | Order, uniqueness, occupancy and SLA; generated test does not assert detour |
+| Driver selection | driver/DriverEligibilityPolicyTest, driver/DriverProximityRankerTest, dispatch/DispatchIntegrationTest | Break/offline/assigned, distance ranking, cool-off |
+| Acceptance race | dispatch/DispatchIntegrationTest, dispatch/DriverOfferPersistenceIntegrationTest | One winner/trip; same driver across different trips not covered |
+| Late insertion | trip/LateBookingInsertionIntegrationTest, trip/TripMutationConcurrencyIntegrationTest | Near/far candidates and capacity race; insertion/cancel race not covered |
+| Cancellation | booking/BookingCancellationIntegrationTest, booking/BookingServiceTest | Affected trip isolation; no execution-time feasibility/driver release |
+| Authorization | auth/SecurityIntegrationTest, auth/SecurityMethodIntegrationTest | Login, ownership, admin/approver boundaries |
+| Local bootstrap | dev/LocalDevBootstrapTest | Local profile and opt-in flag, required credentials, encoded account creation |
+| Rollback/concurrency | batching/BatchingRollbackIntegrationTest, batching/ConcurrentBatchingIntegrationTest | Failure rollback, retry and disjoint claims |
+| Cache/monitoring | zone/ServiceabilityCacheIntegrationTest, observability/ObservabilityIntegrationTest | Cached reads/eviction, probes, Prometheus |
+| Fresh schema | DatabaseIntegrationTest, RideBatchingApplicationTests, repository integration tests | Flyway and JPA validation on PostgreSQL |
+
+Run `./mvnw test` (Windows: `./mvnw.cmd test`); `clean verify` also packages the app. Docker is required; no tests are disabled to accommodate a missing daemon.
+
+JMH is performance evidence, not a correctness test/live capacity guarantee: [benchmark notes](benchmarks/batching.md).

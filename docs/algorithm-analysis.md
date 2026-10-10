@@ -1,14 +1,14 @@
 # Algorithm Complexity Analysis
 
-This document provides a formal time and space complexity analysis for the implemented PURE batch-planning algorithm and related dispatch functions.
+This document analyses in-memory planning and related functions. Runtime batching currently passes all pending bookings to the planner; the window and cluster algorithms are independently implemented, not wired into that cycle.
 
 ## Variables
 
-- **$N$**: Number of pending bookings within a batching window or cluster.
+- **$N$**: Number of pending bookings considered in one cycle or supplied cluster.
 - **$Z$**: Number of active serviceable zones.
 - **$C$**: Number of clusters formed ($C \le N$).
 - **$T$**: Number of active candidate trips ($T \le N$).
-- **$S$**: Number of stops in a single trip route ($S \le 2 \times capacity$).
+- **$S$**: Number of stops in a single trip route. Peak seat occupancy does not bound total stops when passengers turn over; a route can contain up to $2N$ stops.
 - **$D$**: Number of eligible drivers.
 
 ## 1. Window Candidate Retrieval (`BatchingService.formBatches`)
@@ -31,7 +31,7 @@ This document provides a formal time and space complexity analysis for the imple
 
 - **Time Complexity**: $O(S^3)$
   Evaluates all valid insertion pairs (pickup index, drop-off index) where pickup precedes drop-off. There are $O(S^2)$ such pairs. Constructing the route and calculating the travel time for each pair takes $O(S)$, resulting in $O(S^3)$.
-  *Practical Bounds*: While $O(S^3)$ appears high theoretically, vehicle capacities are strictly bounded (e.g., 4 passengers). Thus, $S \le 8$, making $S^3$ extremely small. This behaves practically as $O(1)$, avoiding premature optimization for readability.
+  Route length is not explicitly capped, so $S$ cannot generally be treated as constant. The planner checks only this minimum-cost insertion for feasibility, rather than evaluating every alternative feasible route.
 - **Space Complexity**: $O(S)$
   Allocates a temporary list of stops for candidate routes.
 
@@ -62,4 +62,4 @@ This document provides a formal time and space complexity analysis for the imple
 
 The theoretical hotspot is the **Greedy Batch Planning** step, operating at $O(N^2 \cdot S^3)$. 
 
-Because $S$ is bounded by small physical vehicle capacities, $S^3$ is effectively a small constant. However, as demand scales, the $N^2$ component (comparing $N$ bookings against up to $T \approx N$ candidate trips) will dominate. If the batching window accumulates thousands of bookings within the same zone, $N^2$ operations will cause a significant spike in CPU utilization and planning latency, making this the primary target for future spatial partitioning or heuristic optimizations.
+For a fixed small route length, comparing bookings against candidate trips contributes quadratic work. With passenger turnover, route length can grow independently of seat capacity and the cubic insertion cost also matters. Neither the pending-row claim nor route length has an explicit runtime bound. Benchmark results cover only the recorded synthetic inputs, not a general demand or latency guarantee.

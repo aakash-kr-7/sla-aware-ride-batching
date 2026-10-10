@@ -1,70 +1,22 @@
-# Trip Mutation Flows
+# Trip Mutation Boundaries
 
-These flows illustrate how active trips can be mutated dynamically through late requests or cancellations, and how concurrent safety is maintained.
+## Late insertion
 
-## Late Request Insertion
+After saving a booking in its own repository transaction, `BookingService` calls `BatchingService.attemptLateInsertion` in a separate transaction:
 
-When a new booking is requested, the system evaluates if it can be inserted into an existing candidate trip without violating capacity, SLA, or detour constraints.
+1. Load `PLANNED` trips and their bookings.
+2. Choose a feasible candidate using default planning capacity.
+3. Lock the selected trip with `PESSIMISTIC_WRITE`, refresh it and re-evaluate.
+4. Update route/confirm booking if feasible; otherwise leave it pending.
 
-```mermaid
-sequenceDiagram
-    participant B as Booking
-    participant BS as BookingService
-    participant MS as BatchingService
-    participant T as Trip (Candidate)
-    participant DB as PostgreSQL
-    participant UT as Unrelated Trips
+Dispatched/in-progress trips are excluded; unrelated routes are untouched. The concurrency test verifies competing late requests cannot overfill the vehicle.
 
-    B->>BS: createBooking()
-    BS->>MS: attemptLateInsertion()
-    
-    rect rgb(240, 248, 255)
-        note right of MS: Transaction: attemptLateInsertion
-        MS->>DB: SELECT * FROM trip WHERE status IN (PLANNED, DISPATCHED) FOR UPDATE
-        DB-->>MS: Lock Acquired
-        MS->>T: evaluate capacity/SLA/detour
-        alt Insertion Feasible
-            MS->>T: addBooking(newBooking)
-            MS->>DB: save(Trip)
-            MS-->>BS: true (Inserted)
-        else Insertion Not Feasible
-            MS-->>BS: false (Remain pending)
-        end
-    end
-    
-    rect rgb(245, 245, 245)
-        note right of UT: Boundary Check
-        MS-->>UT: Unrelated trips remain completely untouched
-    end
-```
+Trip refresh does not rebuild the booking map assembled before locking. Concurrent insertion/cancellation may need additional refresh work. Booking save and insertion are separate transactions, so an insertion failure may leave a durable pending booking after an API failure.
 
-## Booking Cancellation (Local Replan)
+## Cancellation
 
-If a booking assigned to a trip is cancelled, the trip is replanned locally by removing the booking's stops.
+One transaction loads the booking, checks supplied employee ID, cancels it and locks its trip. Its two stops are removed; others retain order and are resequenced. Empty trip becomes `CANCELLED`.
 
-```mermaid
-sequenceDiagram
-    participant U as User/Driver
-    participant BS as BookingService
-    participant T as Trip
-    participant DB as PostgreSQL
-    participant UT as Unrelated Trips
+Unrelated trips are untouched. There is no feasibility recheck, offer revocation or driver release. Cancellation is idempotent and rejects `DROPPED`, but currently permits `PICKED_UP`. These are limits, not complete execution-time replanning.
 
-    U->>BS: cancelBooking(bookingId)
-    
-    rect rgb(255, 240, 240)
-        note right of BS: Transaction: cancelBooking
-        BS->>DB: SELECT * FROM booking WHERE id = ?
-        BS->>DB: update Booking (Status: CANCELLED)
-        BS->>DB: SELECT * FROM trip WHERE id = ? FOR UPDATE
-        DB-->>BS: Lock Acquired
-        BS->>T: removeBooking(bookingId)
-        note over T: rebuild route, cancel trip if empty
-        BS->>DB: save(Trip)
-    end
-    
-    rect rgb(245, 245, 245)
-        note right of UT: Boundary Check
-        BS-->>UT: Unrelated trips remain completely untouched
-    end
-```
+See [domain model](domain-model.md), [authorization](auth-boundaries.md), [tests](test-matrix.md).

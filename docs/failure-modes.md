@@ -1,51 +1,21 @@
-# System Failure Modes
+# Failure Handling and Remaining Limits
 
-This document catalogues realistic operational failures within the SLA-Aware Ride Batching platform, specifically mapping out the existing protections and remaining limitations based on the system as currently implemented.
+| Failure | Protection | Recovery/limit |
+| --- | --- | --- |
+| DB unavailable | Aggregate health includes connectivity; transactions protect uncommitted work | No retry/circuit breaker/backup/restore workflow. Restore DB then inspect pending state before retry. Probe health does not include DB by default. |
+| Crash during batching | One transaction covers trips/stops/booking associations | Rollback leaves bookings pending. Retry via admin or enabled scheduler; scheduling is off by default. |
+| Duplicate request | Deterministic key, partial unique index and retrieval after duplicate insert | Same booking ID returned (201). Lookup does not filter cancelled history; rebooking lookup ambiguity remains. |
+| Concurrent batching | `SKIP LOCKED` claims disjoint rows | May create fragmented batches. No later consolidation or maximum claim size. |
+| Competing acceptance | Trip row lock, state guard and unique accepted-offer index | One winner; another gets state/constraint failure. Multiple open offers remain possible. |
+| Failed late insertion | Insertion transaction rolls back | Original booking was saved separately and can remain pending. Post-lock refresh does not rebuild booking map. |
+| Cancellation | Affected trip alone is locked/resequenced | No feasibility recheck, offer revoke or driver release; pickup-time cancellation is not blocked. |
+| Stale zone cache | Five-minute TTL; annotated save/saveAll/delete/deleteAll evict locally | Other write variants, direct SQL and other instances can remain stale until expiry. |
+| Invalid/expired JWT | Non-leaking 401 | No revocation list; account data reloaded each request. Filter catches downstream faults too and can mislabel them. |
+| Invalid domain state | Explicit mappings for validation/missing booking/serviceability | Other argument/state exceptions are not consistently mapped; no blanket 409 guarantee. |
+| Infeasible dedicated trip | Remains pending | No automatic escalation producer; manual inspection needed. |
 
-## 1. Database Unavailable
-* **Impact:** The application is unable to process bookings, form trips, dispatch vehicles, or evaluate cache misses. HTTP requests and scheduled jobs will fail.
-* **Current Protection:** Spring Boot Actuator exposes database liveness in `/actuator/health/liveness`. Uncommitted transactions are automatically aborted/rolled back by PostgreSQL if the TCP connection drops.
-* **Remaining Limitation:** There is no implemented application-level retry/circuit breaker for database outages; the platform halts until PostgreSQL returns.
-* **Recovery Behaviour:** Wait for PostgreSQL. Actuator `health` will naturally recover when the DB is reachable. Application state remains consistent due to ACID compliance.
+Tests cover duplicate races, rollback, dispatch contention and late-insertion capacity. They do not establish complete fault tolerance or recovery readiness.
 
-## 2. Application Crash During Batching
-* **Impact:** A batching cycle terminates midway through forming routes and associating bookings.
-* **Current Protection:** `BatchingService` performs the `formBatches()` cycle inside a `@Transactional` block.
-* **Remaining Limitation:** If the instance dies, the scheduled cycle is missed.
-* **Recovery Behaviour:** Because the transaction never commits, PostgreSQL automatically rolls back the entire batch. Bookings remain `PENDING`. The next cron trigger (or next instance) will safely pick them up and try again.
+Flyway V8/V10 had fresh-schema blockers (wrong employee FK target, existing index name). They were corrected; V1-V7/V9 remain unchanged. If an external DB has manually repaired/applied those files already, review schema and checksums before upgrading; do not blindly run `flyway repair`.
 
-## 3. Duplicate HTTP Retry (e.g., Booking Creation)
-* **Impact:** The client experiences a network timeout and blindly retries submitting the exact same booking request.
-* **Current Protection:** `BookingService` accepts an idempotent deduplication key (e.g., `clientRequestId`). A unique constraint on the database rejects the second `INSERT` with a `DataIntegrityViolationException`.
-* **Remaining Limitation:** The current API responds with a generic 409 Conflict rather than smoothly returning the existing booking's ID (strict idempotency). 
-* **Recovery Behaviour:** The client must fetch their active bookings to confirm if the initial request succeeded. 
-
-## 4. Two Batching Workers / Overlapping Scheduled Execution
-* **Impact:** Multiple instances of the application (or overlapping cron runs on a slow instance) attempt to form batches at the exact same time.
-* **Current Protection:** `BatchingService` uses pessimistic locking (`SELECT ... FOR UPDATE SKIP LOCKED` or similar logic via native query) to claim bookings exclusively. A booking is claimed and locked by exactly one worker.
-* **Remaining Limitation:** While workers won't corrupt data, they might create sub-optimal fragmented trips (e.g. Worker A takes 2 passengers, Worker B takes 2 passengers, instead of 1 trip with 4).
-* **Recovery Behaviour:** The trips are legally formed. The system self-recovers in subsequent cycles.
-
-## 5. Two Competing Driver Acceptances
-* **Impact:** Two drivers attempt to accept the same trip offer simultaneously (or a driver accepts while another rejects).
-* **Current Protection:** Handled via database constraints or optimistic locking (if implemented on the offer/trip).
-* **Remaining Limitation:** Requires explicit locking or state constraints to prevent both drivers from being recorded as the assignee.
-* **Recovery Behaviour:** Only the first transaction commits; the second fails.
-
-## 6. Stale or Unavailable Cache
-* **Impact:** `ServiceableZone` lookups evaluate incorrectly or fail to resolve.
-* **Current Protection:** Caching is bounded and short-lived (5-minute TTL via Caffeine). Any database write to `ServiceableZone` programmatically evicts the cache (`@CacheEvict`).
-* **Remaining Limitation:** It is not a distributed cache; in a multi-instance deployment, changing a zone via Instance A will not evict Instance B's local cache. Instance B remains stale for up to 5 minutes.
-* **Recovery Behaviour:** Resolves naturally after 5 minutes via TTL expiration.
-
-## 7. Invalid or Expired JWT
-* **Impact:** API requests from employees/drivers are rejected.
-* **Current Protection:** `JwtAuthenticationFilter` intercepts requests. Expired or malformed tokens yield a 403 Forbidden / 401 Unauthorized before reaching domain logic.
-* **Remaining Limitation:** We do not track revoked tokens (no JWT blocklist). If a user is fired, their token remains active until its embedded expiry time is reached.
-* **Recovery Behaviour:** User must obtain a new token via `/auth/login`.
-
-## 8. Optimistic-Lock Conflict
-* **Impact:** Two concurrent processes attempt to modify the same entity without pessimistic locks (e.g., two admins modifying a Zone simultaneously).
-* **Current Protection:** If `@Version` is used on JPA entities, the second transaction throws an `OptimisticLockException`.
-* **Remaining Limitation:** The application simply throws a 500 error back to the client. No automatic retry is performed.
-* **Recovery Behaviour:** The user must manually refresh their data and attempt the operation again.
+See [observability](observability.md) and [tests](test-matrix.md).

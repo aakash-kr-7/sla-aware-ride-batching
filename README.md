@@ -1,348 +1,108 @@
 # SLA-Aware Ride Batching
 
-A backend system for turning independent, on-demand employee ride requests into shared trips without compromising vehicle capacity, rider detour constraints, or promised pickup times.
+Java Spring Boot backend for the On-Demand Ride Batching case study: combine employee ride requests into shared trips while checking capacity, detour and pickup deadlines.
 
-This repository is my implementation of the **On-Demand Ride Batching** backend case study.
+The repository implements booking, planning, dispatch and trip mutation, PostgreSQL persistence, JWT authorization, zone caching and metrics. Some case-study flows remain incomplete; see the limitations below.
 
-The project is currently in the design and early implementation stage. I am intentionally documenting the problem and my assumptions before committing to an architecture because most of the difficulty here is not in creating CRUD APIs — it is in deciding when several individually valid ride requests can safely become one shared trip.
+## Start with the important logic
 
-## The problem as I understand it
+| Question | Code | Design context |
+| --- | --- | --- |
+| How does one request become one booking? | [BookingService](src/main/java/com/ridebatching/booking/BookingService.java), [DeduplicationKeyGenerator](src/main/java/com/ridebatching/booking/DeduplicationKeyGenerator.java) | [Deduplication](docs/decisions/0005-handle-booking-deduplication.md) |
+| How are trips formed? | [BatchingService](src/main/java/com/ridebatching/batching/BatchingService.java), [BatchPlanner](src/main/java/com/ridebatching/batching/BatchPlanner.java) | [Batching flow](docs/batching-design.md) |
+| What makes an insertion feasible? | [TripFeasibilityEvaluator](src/main/java/com/ridebatching/batching/evaluator/TripFeasibilityEvaluator.java), [constraints](src/main/java/com/ridebatching/batching/constraint) | [Assumptions](docs/assumptions.md) |
+| How are routes changed? | [RouteInsertionPlanner](src/main/java/com/ridebatching/trip/RouteInsertionPlanner.java), [Trip](src/main/java/com/ridebatching/trip/Trip.java) | [Trip mutations](docs/trip-mutation-flows.md) |
+| How are drivers selected? | [DispatchService](src/main/java/com/ridebatching/dispatch/DispatchService.java), [driver policies](src/main/java/com/ridebatching/driver) | [Dispatch lifecycle](docs/driver-dispatch-lifecycle.md) |
+| Where are geographic rules? | [ServiceabilityService](src/main/java/com/ridebatching/zone/ServiceabilityService.java), [geo](src/main/java/com/ridebatching/geo) | [Zone caching](docs/decisions/007-zone-caching.md) |
 
-Employees can request rides throughout the day.
-
-Sending one vehicle for every request would be simple, but inefficient. The system should instead collect requests arriving within short time windows and attempt to combine compatible requests into shared, multi-stop trips.
-
-The important part is that batching is not allowed to break the guarantees made to individual riders.
-
-A request therefore cannot simply be grouped with another request because the pickup locations happen to be nearby.
-
-A valid batch also needs to respect:
-
-- serviceable pickup zones;
-- duplicate-request protection;
-- the batching time window;
-- origin and destination compatibility;
-- vehicle capacity;
-- acceptable rider detour;
-- pickup SLA;
-- driver availability;
-- driver rejection/cool-off behaviour.
-
-The system must also cope with changes after a trip has been created, particularly late ride requests and cancellations.
-
-One requirement I think is especially important is that cancelling a booking should only cause the affected trip to be reconsidered. Other valid trips should remain stable.
-
-That gives me an early design principle for the project:
-
-> **Optimisation should not come at the expense of correctness or stability.**
-
-## What I think the core engineering problem is
-
-At first glance this looks like a ride-booking API.
-
-I don't think that is really the interesting problem.
-
-Creating a booking is relatively straightforward.
-
-The difficult decision is what happens after several pending bookings exist:
+## Repository map
 
 ```text
-Can these requests travel together?
-
-            │
-            ├── Are they temporally compatible?
-            ├── Are their pickup locations compatible?
-            ├── Are they travelling in roughly the same direction?
-            ├── Is there enough vehicle capacity?
-            ├── Is the additional detour acceptable?
-            └── Can every pickup still happen within its SLA?
+.github/workflows/       CI: clean verify on Java 21
+.mvn/wrapper/            Maven distribution configuration
+src/main/java/com/ridebatching/
+  booking/              ingestion, deduplication, retrieval and cancellation
+  batching/             orchestration, planner, window and cluster algorithms
+    constraint/         capacity, pickup SLA and detour policies
+    evaluator/          ordered feasibility checks and rejection traces
+    api/                manual batching endpoint
+  trip/                 route aggregate, stop ordering and insertion search
+  driver/               driver state, eligibility and proximity ranking
+  dispatch/             offers, rejection cool-off and assignment
+  zone/                 circular serviceability checks and cached lookup
+  fleet/                vehicle and capacity values used during planning
+  geo/                  coordinates, distance, bearing and ETA estimates
+  auth/                 accounts, JWTs and Spring Security
+  escalation/           records and read-only inspection API
+  api/                  shared HTTP errors, pagination and correlation IDs
+  config/               properties, cache and OpenAPI wiring
+  dev/                  opt-in local admin bootstrap
+src/main/resources/     application profiles and Flyway migrations
+src/test/               unit and PostgreSQL integration tests
+src/benchmark/java/     JMH source, only compiled with benchmark profile
+docs/                   design, API contracts, limits and test evidence
 ```
 
-Only if those constraints remain valid should the system create or modify a shared trip.
+Controllers and DTOs stay inside their feature. Shared HTTP concerns have one explicit `api` package. Small features keep domain classes and repositories together instead of adding empty layer folders.
 
-For that reason I currently think of the project less as a booking application and more as a small **constraint-aware ride orchestration engine**.
+## Build and test
 
-## Current design principles
+Requires JDK 17 or newer and a running Docker daemon. Maven is supplied by the wrapper. The POM targets Java 17; CI runs on Java 21.
 
-These are not implementation details yet. They are the principles I currently want the implementation to preserve.
-
-### 1. SLA is a hard constraint
-
-Batching is useful only when it does not cause a rider to miss the promised pickup time.
-
-If adding a rider makes the trip violate an existing rider's SLA, that candidate batch should be rejected even if sharing the vehicle would otherwise be more efficient.
-
-### 2. Batching decisions should be explainable
-
-I want the system to be able to explain why a request was or was not placed into a particular trip.
-
-For example:
-
-```text
-Candidate trip T-104
-
-Zone compatible        ✓
-Direction compatible   ✓
-Capacity available     ✓
-Pickup SLA             ✗
-
-Decision: reject candidate
-Reason: pickup SLA would be exceeded
+```sh
+./mvnw test
+./mvnw clean verify
 ```
 
-This should make the batching logic easier to debug, test and demonstrate.
+On PowerShell use `./mvnw.cmd test` and `./mvnw.cmd clean verify`. `verify` runs tests and packages the executable JAR under `target/`. Tests use disposable PostgreSQL 16 containers, including migration validation; they do not use the Compose database or H2.
 
-### 3. Duplicate prevention must survive concurrency
+See [test coverage and gaps](docs/test-matrix.md) and [contribution conventions](CONTRIBUTING.md).
 
-The case study explicitly mentions double-submission.
+## Run locally
 
-A simple application-level `exists()` check followed by `save()` may prevent ordinary duplicate requests but can still fail when two equivalent requests arrive concurrently.
+1. Copy `.env.example` to `.env`. Supply `DB_PASSWORD` and a random `JWT_SECRET` of at least 32 characters. The populated file is ignored by Git.
+2. Start PostgreSQL: `docker compose up -d`. Check it with `docker compose ps`.
+3. Export the same values into the app environment. Compose loads `.env`; Spring Boot does not load it automatically.
 
-I therefore want duplicate prevention to eventually have a persistence-level guarantee rather than relying only on controller/service logic.
+PowerShell can import this repository's simple `NAME=value` file without executing it:
 
-The exact deduplication key still needs to be finalized.
-
-### 4. Changes should have a bounded blast radius
-
-A late request should only join an existing trip if that insertion remains valid.
-
-Similarly, a cancellation should trigger reconsideration of the affected trip rather than reshuffling unrelated trips.
-
-I want trip planning to be local enough that these behaviours remain predictable.
-
-### 5. Infrastructure should earn its place
-
-I expect the final system to include persistence, structured logging, metrics, authentication and probably caching.
-
-However, I don't want to introduce infrastructure purely because it makes the architecture diagram larger.
-
-For example, if caching is introduced, I want to be able to answer:
-
-- what data is being cached;
-- why that data is hot enough to justify caching;
-- how it is invalidated;
-- what stale data would mean for the system.
-
-The same principle applies to every additional component.
-
-## Rough request lifecycle
-
-My current mental model is:
-
-```text
-Ride request
-     │
-     ▼
-Input validation
-     │
-     ▼
-Serviceable-zone check
-     │
-     ▼
-Duplicate detection
-     │
-     ▼
-Pending booking
-     │
-     ▼
-Batching window
-     │
-     ▼
-Candidate clustering
-     │
-     ▼
-Capacity / detour / SLA evaluation
-     │
-     ├── infeasible ──► split / create another trip
-     │
-     └── feasible
-            │
-            ▼
-        Shared trip
-            │
-            ▼
-     Eligible drivers
-            │
-            ▼
-        Driver offer
+```powershell
+Get-Content .env | ForEach-Object {
+    if ($_ -match '^([A-Z][A-Z0-9_]*)=(.*)$') {
+        [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process')
+    }
+}
+./mvnw.cmd spring-boot:run '-Dspring-boot.run.profiles=local'
 ```
 
-This will almost certainly change as I start implementing and testing the behaviour.
+In a POSIX shell, export the variables before `./mvnw spring-boot:run -Dspring-boot.run.profiles=local`.
 
-I would rather record those changes than pretend the first design was perfect.
+The DB port is bound to loopback. `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `JWT_SECRET` and `SERVER_PORT` configure connections and secrets. Operational settings in [application.yml](src/main/resources/application.yml) support environment overrides, e.g. `APP_SLA_PICKUP_SLA_MINUTES`.
 
-## Areas I still need to define
+Admin creation is disabled by default. For an empty account table, set `LOCAL_ADMIN_ENABLED=true`, `LOCAL_ADMIN_USERNAME` and `LOCAL_ADMIN_PASSWORD`, then start with the `local` profile. It creates only an admin; employee identities and serviceable zones must be provisioned separately. There is no destructive demo reseeding profile.
 
-Some parts of the case study deliberately leave implementation choices open.
+The app listens on port 8080 by default. Open [Swagger UI](http://localhost:8080/swagger-ui/index.html), [OpenAPI JSON](http://localhost:8080/v3/api-docs) or [health](http://localhost:8080/actuator/health). Supported endpoints and examples are in [API design](docs/api-design.md).
 
-Before implementing the batching algorithm I need to make explicit assumptions around:
+`docker compose down` preserves the database volume. `docker compose down -v` deletes local database data.
 
-- how serviceable zones are represented;
-- how location proximity is measured;
-- how destination direction compatibility is calculated;
-- what counts as an acceptable detour;
-- how pickup-time estimates are produced;
-- what exactly defines a booking slot for deduplication;
-- how vehicle capacity is represented;
-- how a driver's proximity to a trip is determined;
-- how long driver rejection cool-off should last.
+## Design and operational notes
 
-I plan to keep these assumptions in `docs/assumptions.md` rather than hide them inside implementation constants.
+- [Architecture and trade-offs](docs/decisions/001-initial-architecture.md)
+- [Case-study requirements](docs/problem-analysis.md), [implemented domain model](docs/domain-model.md)
+- [Authorization boundaries](docs/auth-boundaries.md)
+- [Failure and recovery limits](docs/failure-modes.md), [observability](docs/observability.md)
+- [Algorithm complexity](docs/algorithm-analysis.md), [historical benchmarks](docs/benchmarks/batching.md)
 
-## Planned implementation sequence
+Deduplication and trip mutation rely on PostgreSQL constraints and transactions. Only active-zone lookups are cached. Routing uses local distance/speed estimates rather than live road-network data.
 
-I plan to build the system incrementally.
+## Current limitations
 
-The first working slice will be deliberately small:
+- Window slots and leader clustering have unit coverage, but `formBatches()` claims all pending bookings and sends them directly to the planner. Window/zone/direction partitioning is not wired into that cycle.
+- Scheduling is off by default. When enabled it uses a fixed delay (default 5 seconds), independently of slot length.
+- Infeasible solo bookings remain pending. Escalation inspection exists, but no automatic producer/resolution flow exists.
+- Dispatch is callable through services/tests. There are no driver, trip-tracking, zone-management or fleet-management HTTP endpoints, and batching does not automatically dispatch offers.
+- Cancellation removes/resequences only the affected trip's stops. Feasibility revalidation, driver/offer revocation and prevention of cancellation after pickup remain gaps.
+- SLA estimates exclude driver approach time. Seat capacity bounds concurrent riders, not total stops.
+- Error mapping and JWT filtering have limits described in the failure notes. Offer expiration and trip execution have no automatic flow.
 
-```text
-booking request
-      ↓
-validation
-      ↓
-serviceability
-      ↓
-deduplication
-      ↓
-persistent PENDING booking
-```
-
-Once that behaviour is well tested, I will introduce batching windows and clustering.
-
-After that I will add the constraints that determine whether a proposed shared trip is actually feasible:
-
-```text
-capacity
-    +
-detour
-    +
-pickup SLA
-```
-
-Driver assignment, late insertion and cancellation/replanning will be built after the trip formation rules are reliable.
-
-Production-oriented concerns such as authentication, metrics, caching and failure handling will then be added where the implementation gives them a concrete purpose.
-
-## Testing approach
-
-I don't want the tests to only prove that endpoints return HTTP 200.
-
-The important tests should prove business invariants.
-
-Examples I already expect to need include:
-
-```text
-same booking submitted twice creates one booking
-
-concurrent equivalent requests still create one booking
-
-pickup outside serviceable zone is rejected
-
-five compatible requests cannot fit into one four-seat vehicle
-
-candidate trip is rejected when one rider would miss pickup SLA
-
-late booking is rejected when insertion breaks an existing rider's SLA
-
-driver on active break never receives an offer
-
-driver who rejects a trip is not immediately offered the same trip again
-
-cancelling one booking replans its trip without modifying unrelated trips
-```
-
-I expect this list to grow as implementation exposes edge cases I have not considered yet.
-
-## Repository notes
-
-The commit history is intentionally part of this project.
-
-I want each meaningful capability or design correction to appear as its own change rather than implementing the entire system locally and pushing one final snapshot.
-
-That should also make it possible to see how the solution changed as I understood the problem better.
-
-## Building and Testing
-
-### Prerequisites
-
-- Java 21 JDK (`JAVA_HOME` pointing to JDK 21)
-- Docker daemon (running, required for Testcontainers PostgreSQL integration tests)
-
-### Commands
-
-Compile application classes:
-
-```bash
-./mvnw clean compile
-```
-
-Run test suite (including Testcontainers PostgreSQL context verification):
-
-```bash
-./mvnw clean test
-```
-
-Package executable JAR:
-
-```bash
-./mvnw clean package
-```
-
-## Local Development Environment
-
-### 1. Start Local PostgreSQL
-
-Copy the sample environment file if custom ports or credentials are required:
-
-```bash
-cp .env.example .env
-```
-
-Start the PostgreSQL service in the background:
-
-```bash
-docker compose up -d
-```
-
-Verify that the container is healthy:
-
-```bash
-docker compose ps
-```
-
-### 2. Application Startup
-
-Run the application locally against the local PostgreSQL container (executing Flyway migrations on startup):
-
-```bash
-./mvnw spring-boot:run -Dspring-boot.run.profiles=local
-```
-
-Actuator health endpoints become accessible at `http://localhost:8080/actuator/health`.
-
-### 3. Stop or Reset Database
-
-Stop the container while preserving persisted data:
-
-```bash
-docker compose down
-```
-
-Stop and completely reset the database (wipes all tables and the volume):
-
-```bash
-docker compose down -v
-```
-
-## Current status
-
-**Stage: Phase 1 — Foundation (Local Environment & Persistence Baseline)**
-
-At this point:
-- Spring Boot 3.3.5 and Java 21 project skeleton initialized.
-- Maven Wrapper configured (`./mvnw` and `mvnw.cmd`).
-- Minimal Docker Compose setup for local PostgreSQL development with `.env.example`.
-- Flyway migration baseline configured (`V1__init.sql`).
-- Test suite verifies persistence context against real PostgreSQL via Testcontainers without falling back to H2.
-- Minimal GitHub Actions CI workflow configured for automated Java 21 build and test verification.
-
+These boundaries describe the implementation, not production readiness or complete case-study coverage.

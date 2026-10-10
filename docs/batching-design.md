@@ -1,64 +1,37 @@
-# Batching Design
+# Batching and Route Planning
 
-This document details the batching algorithm and rules implemented in the application.
-
-## 1. Request-to-Trip Flow
-
-When a batching cycle is triggered, the system extracts eligible pending bookings and processes them into fully formed trips.
+`BatchingService.formBatches()` claims **all** pending bookings with `FOR UPDATE SKIP LOCKED`, plans/persists trip aggregates and confirms assigned bookings in one transaction. Exceptions roll back trips, stops and booking associations together.
 
 ```mermaid
 flowchart TD
-    A[Pending Bookings] --> B[Batching Window]
-    B --> C[Request Clusterer]
-    C --> D[Greedy Batch Planner]
-    D --> E[Candidate Insertion]
-    E --> F[Trip Feasibility Evaluator]
-    F --> G[Trip Formation]
-    G --> H[Trip & Stops Persisted]
+    Pending[All pending bookings] --> Lock[Claim rows: SKIP LOCKED]
+    Lock --> Sort[Sort by deadline, then booking ID]
+    Sort --> Insert[Try cheapest route insertion into candidate trips]
+    Insert --> Evaluate[Structure, capacity, pickup SLA, detour]
+    Evaluate -->|Feasible| Shared[Assign candidate route]
+    Evaluate -->|No candidate fits| Solo[Evaluate dedicated trip]
+    Solo -->|Feasible| New[Create trip]
+    Solo -->|Infeasible| Wait[Leave booking pending]
+    Shared --> Persist[Persist trips and confirm bookings]
+    New --> Persist
 ```
 
-## 2. One Candidate Decision
+`BatchPlanner` is a deterministic greedy heuristic. It compares feasible trips by incremental route cost. `RouteInsertionPlanner` enumerates pickup-before-dropoff positions and returns the lowest-cost route. **Only that route is feasibility-checked**; a more expensive feasible insertion may be missed.
 
-When attempting to insert a booking into an existing candidate trip, the system evaluates structural and SLA-based constraints in a strict sequence to avoid expensive calculations when an earlier constraint fails.
+`TripFeasibilityEvaluator` checks structural order, capacity, pickup deadlines and both detour bounds, emitting a rejection trace. ETA starts at first pickup and excludes driver approach. Dedicated trips are checked too: splitting cannot rescue an expired promise.
 
-```mermaid
-flowchart TD
-    Start[Evaluate Candidate Insertion] --> Struct[Structural Check]
-    Struct -- Pass --> Cap[Capacity Constraint]
-    Struct -- Fail --> Reject[Reject]
-    Cap -- Pass --> SLA[SLA Constraint]
-    Cap -- Fail --> Reject
-    SLA -- Pass --> Detour[Detour Constraint]
-    SLA -- Fail --> Reject
-    Detour -- Pass --> Accept[Accept Candidate]
-    Detour -- Fail --> Reject
-```
+## Window and clustering boundary
 
-## 3. High-Level Algorithm Complexity
+`BatchingWindow` defines UTC buckets and eligible selection. Booking creation uses the bucket start for deduplication. `RequestClusterer` groups by zone and leader bearing, ordered by creation time/ID. Both have unit tests.
 
-The batching algorithm operates as a **deterministic greedy heuristic**.
+Neither is currently called by `formBatches()`. Slot duration is not a runtime collection delay; same-window/zone/direction orchestration is not enforced by that service.
 
-Given:
-- $N$: Number of bookings in a cluster.
-- $M$: Number of existing active/planned trips.
-- $S$: Maximum number of stops per trip.
+The admin endpoint runs one cycle. Scheduling is disabled unless explicitly enabled; fixed delay defaults to five seconds. Batch formation does not dispatch drivers or produce escalations.
 
-**Algorithm Steps & Complexity:**
-1. **Sorting**: Bookings are sorted by urgency (`pickupSlaDeadline` ascending), breaking ties by ID to ensure determinism. $O(N \log N)$
-2. **Insertion Generation**: For each booking, we attempt insertion into existing trips.
-    - An existing trip with $S$ stops has $O(S^2)$ possible valid insertion point pairs (pickup before drop-off).
-    - We evaluate insertion for all $M$ active trips.
-3. **Evaluation**: Each insertion point is evaluated against constraints (Capacity, SLA, Detour). $O(S)$ per insertion evaluation.
-4. **Fallback**: If no existing trip is feasible, a new trip is formed containing just the current booking.
+## Cost and bounds
 
-**Overall Complexity**: 
-For $N$ bookings, the worst-case number of trips is $N$. If we form $N$ trips, the search space grows as we process bookings. In practice, vehicle capacity strictly limits $S$ (e.g., $S \le 8$ for a 4-seater). Thus $S$ is $O(1)$.
-Therefore, for each of the $N$ bookings, we evaluate at most $O(N)$ candidate trips.
-The worst-case time complexity per cluster is **$O(N^2)$**, making it highly efficient for reasonable cluster sizes.
+For N bookings, T candidate trips and S stops, planning takes O(N log N + N*T*S^3). Insertion enumerates O(S^2) positions and calculates O(S) route cost for each. See [algorithm analysis](algorithm-analysis.md).
 
-### Transaction Boundaries and Concurrency
-To allow concurrent workers without introducing distributed locks, batching relies on native PostgreSQL locking:
-```sql
-SELECT * FROM bookings WHERE status = 'PENDING' FOR UPDATE SKIP LOCKED
-```
-Workers exclusively claim non-overlapping sets of pending bookings and process them transactionally.
+Capacity bounds peak occupancy, not total route stops: passenger turnover can exceed twice the seat count. No explicit pending-row/stop cap exists. Window length and physical seats alone do not prove bounded runtime work.
+
+See [assumptions](assumptions.md), [trip mutations](trip-mutation-flows.md) and [tests](test-matrix.md).

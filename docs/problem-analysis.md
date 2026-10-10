@@ -1,5 +1,9 @@
 # Problem Analysis
 
+This is the case-study requirements baseline. It includes actors and entities
+whose workflows are not fully implemented. See the [current domain model](domain-model.md)
+and [implementation limits](../README.md#current-limitations) for the runtime boundary.
+
 ## Actors
 
 Employee
