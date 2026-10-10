@@ -28,7 +28,7 @@ public abstract class AbstractPostgresIntegrationTest {
     @org.junit.jupiter.api.AfterEach
     protected void cleanupDatabase() {
         if (jdbcTemplate != null) {
-            jdbcTemplate.execute("TRUNCATE TABLE trip_stops, trips, bookings, employees CASCADE");
+            jdbcTemplate.execute("TRUNCATE TABLE trip_stops, trips, bookings, employees, drivers CASCADE");
         }
     }
 }

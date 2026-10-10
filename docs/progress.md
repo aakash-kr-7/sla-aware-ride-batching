@@ -11,10 +11,10 @@ This document tracks the actual state of the repository, reflecting features tha
 | booking                | D        | I           | T      | Basic creation API and persistence |
 | deduplication          | D        | I           | T      | Deterministic keys, DB race handling |
 | serviceability         | D        | I           | T      | Geospatial point-in-polygon matching |
-| batching               | —        | —           | —      | |
-| SLA                    | —        | —           | —      | |
-| detour                 | —        | —           | —      | |
-| driver dispatch        | —        | —           | —      | |
+| batching               | D        | I           | T      | Greedy heuristics, concurrency safe |
+| SLA                    | D        | I           | T      | Implemented via TripFeasibilityEvaluator |
+| detour                 | D        | I           | T      | Relative and absolute thresholds enforced |
+| driver dispatch        | D        | I           | T      | State machine & basic eligibility (ranking/offers pending) |
 | late insertion         | —        | —           | —      | |
 | cancellation           | —        | —           | —      | |
 | authentication         | —        | —           | —      | |
