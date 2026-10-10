@@ -8,7 +8,11 @@ Swagger UI: `/swagger-ui/index.html`. Generated schema: `/v3/api-docs`.
 
 Business requests use `Authorization: Bearer <JWT>`. Booking creation, listing and cancellation also require `X-Employee-Id: <UUID>`. It must match the employee bound to the account unless the caller is an admin. Booking ownership is checked separately on retrieval/cancellation.
 
-Only `EMPLOYEE`, `ADMIN`, `APPROVER` are account roles. See [authorization](auth-boundaries.md).
+`UserAccount` stores a BCrypt password hash and an optional employee link. JWTs expire after one hour by default. The filter verifies the token and reloads current account role/employee data by username; claims alone are not the method-authorization source. There is no revocation list.
+
+Roles are `EMPLOYEE`, `ADMIN`, `APPROVER`; no driver role exists. Booking methods permit ADMIN or matching employee identity, not an explicit EMPLOYEE-only role check. Any account role with the matching employee link can satisfy that condition. Cancellation also requires the supplied employee to own the booking, including for admins.
+
+`JWT_SECRET` is required. Default runtime creates no accounts. Local admin bootstrap requires the local profile, explicit enablement, supplied credentials and an empty account table.
 
 ## Booking routes
 
@@ -41,17 +45,7 @@ The page contains `content`, `totalElements`, `totalPages`, `size`, `number` (ze
 
 Batching accepts no window parameter and considers all pending bookings. Escalations must currently be supplied separately; batching does not create them.
 
-Actuator exposes health, info, metrics and Prometheus without authentication. See [observability](observability.md).
-
-## Sample calls
-
-With an existing account, employee and serviceable pickup:
-
-```sh
-curl -X POST http://localhost:8080/auth/login -H 'Content-Type: application/json' -d '{"username":"<account>","password":"<password>"}'
-curl -X POST http://localhost:8080/api/v1/bookings -H 'Authorization: Bearer <JWT>' -H 'X-Employee-Id: <employee-UUID>' -H 'Content-Type: application/json' -d '{"pickup":{"latitude":12.9716,"longitude":77.5946},"dropoff":{"latitude":12.9352,"longitude":77.6245}}'
-curl -X POST http://localhost:8080/api/admin/batching/trigger -H 'Authorization: Bearer <admin-JWT>'
-```
+Actuator exposes health, info, metrics and Prometheus without authentication. See [operational endpoints](failure-modes.md#health-metrics-and-logs).
 
 ## Error contracts and limits
 

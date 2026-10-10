@@ -11,10 +11,10 @@ This document analyses in-memory planning and related functions. Runtime batchin
 - **$S$**: Number of stops in a single trip route. Peak seat occupancy does not bound total stops when passengers turn over; a route can contain up to $2N$ stops.
 - **$D$**: Number of eligible drivers.
 
-## 1. Window Candidate Retrieval (`BatchingService.formBatches`)
+## 1. Pending Candidate Retrieval (`BatchingService.formBatches`)
 
-- **Time Complexity**: $O(N)$
-  Pending bookings are fetched via a partial index on `status = 'PENDING'` using `FOR UPDATE SKIP LOCKED`. While index access is fast, streaming $N$ rows into application memory scales linearly.
+- **Application row transfer/materialization**: $O(N)$ for N returned rows.
+  The query is `status = 'PENDING' FOR UPDATE SKIP LOCKED`, with a partial status index available. Actual DB cost depends on query plan, table size and locked rows; no constant or strictly linear DB-time guarantee is claimed.
 - **Space Complexity**: $O(N)$
   Allocates memory for $N$ booking entities.
 
@@ -38,7 +38,7 @@ This document analyses in-memory planning and related functions. Runtime batchin
 ## 4. Constraint Evaluation (`TripFeasibilityEvaluator.evaluate`)
 
 - **Time Complexity**: $O(S)$
-  Performs structural checks (duplicate stops, missing drop-offs), capacity checks, and SLA/detour validation by iterating linearly over the route's $S$ stops.
+  Performs structural/onboard checks, capacity checks and SLA/detour validation by iterating over S stops and the route-specific booking map (at most S entries). `Trip.assignRoute` separately validates repeated pickup/dropoff pairs.
 - **Space Complexity**: $O(S)$
   Maintains a HashSet (`onboard`) and execution trace tracking up to $S$ passengers.
 
@@ -47,7 +47,7 @@ This document analyses in-memory planning and related functions. Runtime batchin
 - **Time Complexity**: $O(N \log N + N \cdot T \cdot S^3)$
   - Sorts bookings by SLA urgency deterministically: $O(N \log N)$.
   - For each of the $N$ bookings, evaluates insertion into $T$ existing trips. Each evaluation calls route insertion ($O(S^3)$) and feasibility ($O(S)$).
-  - Worst case ($T = N$, every booking forms its own trip): $O(N^2 \cdot S^3)$.
+  - A conservative bound substitutes $T \le N$: $O(N^2 \cdot S^3)$. If every trip is solo, S is small; the maximum T and maximum S cannot both be attained by those same solo trips.
 - **Space Complexity**: $O(N)$
   Allocates lists and maps for trips and current bookings.
 
@@ -58,8 +58,8 @@ This document analyses in-memory planning and related functions. Runtime batchin
 - **Space Complexity**: $O(D)$
   Requires memory to construct and store the sorted list of drivers.
 
-## Algorithmic Hotspot
+## Algorithmic Cost and Evidence
 
-The theoretical hotspot is the **Greedy Batch Planning** step, operating at $O(N^2 \cdot S^3)$. 
+Route insertion dominates per-candidate search. A conservative global bound is $O(N^2 \cdot S^3)$, not a measured runtime model.
 
 For a fixed small route length, comparing bookings against candidate trips contributes quadratic work. With passenger turnover, route length can grow independently of seat capacity and the cubic insertion cost also matters. Neither the pending-row claim nor route length has an explicit runtime bound. Benchmark results cover only the recorded synthetic inputs, not a general demand or latency guarantee.
