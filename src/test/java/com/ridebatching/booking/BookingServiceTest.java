@@ -38,6 +38,9 @@ class BookingServiceTest {
     @Mock
     private DeduplicationKeyGenerator deduplicationKeyGenerator;
 
+    @Mock
+    private com.ridebatching.config.AppProperties appProperties;
+
     @InjectMocks
     private BookingService bookingService;
 
@@ -52,6 +55,10 @@ class BookingServiceTest {
         when(deduplicationKeyGenerator.generateKey(any(), any(), any(), any()))
             .thenReturn("dummy-key");
         
+        com.ridebatching.config.AppProperties.BatchingProperties batchingProps = 
+            new com.ridebatching.config.AppProperties.BatchingProperties(15);
+        when(appProperties.batching()).thenReturn(batchingProps);
+
         when(bookingRepository.saveAndFlush(any(Booking.class))).thenAnswer(i -> i.getArguments()[0]);
 
         BookingRequest request = new BookingRequest(

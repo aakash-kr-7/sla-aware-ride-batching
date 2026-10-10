@@ -10,15 +10,16 @@ import com.ridebatching.zone.ServiceableZone;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import com.ridebatching.booking.exception.BookingNotFoundException;
+import com.ridebatching.batching.BatchingWindow;
+import com.ridebatching.config.AppProperties;
 
 @Service
 public class BookingService {
@@ -27,15 +28,18 @@ public class BookingService {
     private final EmployeeRepository employeeRepository;
     private final ServiceabilityService serviceabilityService;
     private final DeduplicationKeyGenerator deduplicationKeyGenerator;
+    private final AppProperties appProperties;
 
     public BookingService(BookingRepository bookingRepository,
                           EmployeeRepository employeeRepository,
                           ServiceabilityService serviceabilityService,
-                          DeduplicationKeyGenerator deduplicationKeyGenerator) {
+                          DeduplicationKeyGenerator deduplicationKeyGenerator,
+                          AppProperties appProperties) {
         this.bookingRepository = bookingRepository;
         this.employeeRepository = employeeRepository;
         this.serviceabilityService = serviceabilityService;
         this.deduplicationKeyGenerator = deduplicationKeyGenerator;
+        this.appProperties = appProperties;
     }
 
     // Removed @Transactional to prevent DataIntegrityViolationException from marking 
@@ -57,7 +61,8 @@ public class BookingService {
             .orElseThrow(() -> new IllegalArgumentException("Employee not found"));
 
         Instant now = Instant.now();
-        Instant slotTimestamp = normalizeTo15MinuteSlot(now);
+        Duration windowDuration = Duration.ofMinutes(appProperties.batching().windowDurationMinutes());
+        Instant slotTimestamp = BatchingWindow.forTime(now, windowDuration).start();
         Instant slaDeadline = now.plus(20, ChronoUnit.MINUTES);
 
         String dedupKey = deduplicationKeyGenerator.generateKey(employeeId, pickup, dropoff, slotTimestamp);
@@ -101,12 +106,7 @@ public class BookingService {
             .map(this::mapToResponse);
     }
 
-    private Instant normalizeTo15MinuteSlot(Instant time) {
-        LocalDateTime ldt = LocalDateTime.ofInstant(time, ZoneOffset.UTC);
-        int minute = ldt.getMinute();
-        int normalizedMinute = (minute / 15) * 15;
-        return ldt.withMinute(normalizedMinute).withSecond(0).withNano(0).toInstant(ZoneOffset.UTC);
-    }
+
 
     private BookingResponse mapToResponse(Booking booking) {
         return new BookingResponse(

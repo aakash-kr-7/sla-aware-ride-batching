@@ -9,3 +9,11 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+
+app:
+  batching:
+    window-duration-minutes: 15
+  sla:
+    pickup-sla-minutes: 20
+  geo:
+    dedup-coordinate-precision: 4
