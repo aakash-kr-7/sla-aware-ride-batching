@@ -25,3 +25,35 @@ We decided to handle the database uniqueness constraint natively and narrowly:
 
 - We safely resolve race conditions during concurrent identical booking creation without throwing 500 errors due to a doomed transaction.
 - The `deduplication_key` column makes uniqueness explicitly visible in the data model and simpler to index in the database.
+
+## Sequence Diagram
+
+The following diagram illustrates how two perfectly simultaneous requests for the same booking are handled without throwing database errors or returning 500s.
+
+```mermaid
+sequenceDiagram
+    participant A as Request A
+    participant B as Request B
+    participant S as Application Service
+    participant DB as PostgreSQL
+
+    A->>S: createBooking()
+    B->>S: createBooking()
+    
+    note over S: Generates same deduplication_key for both
+    
+    par Race Condition
+        S->>DB: saveAndFlush() (Request A)
+        S->>DB: saveAndFlush() (Request B)
+    end
+    
+    DB-->>S: OK (Winner)
+    S-->>A: Returns Booking ID 123
+    
+    DB--xS: DataIntegrityViolationException (Loser)
+    note over S: Catch Exception
+    
+    S->>DB: findByDeduplicationKey()
+    DB-->>S: Returns existing Booking ID 123
+    S-->>B: Returns Booking ID 123
+```

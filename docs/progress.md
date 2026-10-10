@@ -8,9 +8,9 @@ This document tracks the actual state of the repository, reflecting features tha
 | :---                   | :---:    | :---:       | :---:  | :--- |
 | project bootstrap      | D        | I           | T      | Maven, Spring Boot 3.3, Java 21, CI Pipeline |
 | PostgreSQL environment | D        | I           | T      | Docker Compose, Testcontainers, Flyway |
-| booking                | —        | —           | —      | |
-| deduplication          | —        | —           | —      | |
-| serviceability         | —        | —           | —      | |
+| booking                | D        | I           | T      | Basic creation API and persistence |
+| deduplication          | D        | I           | T      | Deterministic keys, DB race handling |
+| serviceability         | D        | I           | T      | Geospatial point-in-polygon matching |
 | batching               | —        | —           | —      | |
 | SLA                    | —        | —           | —      | |
 | detour                 | —        | —           | —      | |
