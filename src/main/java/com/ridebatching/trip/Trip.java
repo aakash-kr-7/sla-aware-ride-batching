@@ -1,0 +1,118 @@
+package com.ridebatching.trip;
+
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
+import jakarta.persistence.Table;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+
+@Entity
+@Table(name = "trips")
+public class Trip {
+
+    @Id
+    private UUID id;
+
+    @Enumerated(EnumType.STRING)
+    private TripStatus status;
+
+    private UUID vehicleId;
+    private UUID driverId;
+    
+    private Instant windowStartTime;
+    private Instant createdAt;
+    private Instant updatedAt;
+
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
+    @JoinColumn(name = "trip_id", nullable = false)
+    @OrderBy("sequenceOrder ASC")
+    private List<TripStop> stops = new ArrayList<>();
+
+    protected Trip() {
+        // JPA required
+    }
+
+    public Trip(UUID id, Instant windowStartTime, Instant createdAt) {
+        this.id = id;
+        this.status = TripStatus.PLANNED;
+        this.windowStartTime = windowStartTime;
+        this.createdAt = createdAt;
+        this.updatedAt = createdAt;
+    }
+
+    public UUID getId() { return id; }
+    public TripStatus getStatus() { return status; }
+    public UUID getVehicleId() { return vehicleId; }
+    public UUID getDriverId() { return driverId; }
+    public Instant getWindowStartTime() { return windowStartTime; }
+    public Instant getCreatedAt() { return createdAt; }
+    public Instant getUpdatedAt() { return updatedAt; }
+
+    /**
+     * Returns an unmodifiable view of the current stops.
+     */
+    public List<TripStop> getStops() {
+        return Collections.unmodifiableList(stops);
+    }
+
+    /**
+     * Assigns a sequenced route to this trip.
+     * Enforces the invariant that for every booking, the pickup stop 
+     * must occur before its drop-off stop.
+     */
+    public void assignRoute(List<TripStop> route) {
+        validatePickupBeforeDropoff(route);
+        
+        this.stops.clear();
+        for (int i = 0; i < route.size(); i++) {
+            TripStop stop = route.get(i);
+            stop.setSequenceOrder(i + 1);
+            this.stops.add(stop);
+        }
+        
+        this.updatedAt = Instant.now();
+    }
+
+    private void validatePickupBeforeDropoff(List<TripStop> route) {
+        Set<UUID> seenPickups = new HashSet<>();
+        Set<UUID> seenDropoffs = new HashSet<>();
+        
+        for (TripStop stop : route) {
+            UUID bookingId = stop.getBookingId();
+            
+            if (stop.getType() == TripStopType.PICKUP) {
+                if (seenPickups.contains(bookingId)) {
+                    throw new InvalidRouteException("Duplicate pickup for booking: " + bookingId);
+                }
+                seenPickups.add(bookingId);
+                
+            } else if (stop.getType() == TripStopType.DROPOFF) {
+                if (!seenPickups.contains(bookingId)) {
+                    throw new InvalidRouteException("Dropoff occurs before pickup for booking: " + bookingId);
+                }
+                if (seenDropoffs.contains(bookingId)) {
+                    throw new InvalidRouteException("Duplicate dropoff for booking: " + bookingId);
+                }
+                seenDropoffs.add(bookingId);
+            }
+        }
+        
+        for (UUID pickupBookingId : seenPickups) {
+            if (!seenDropoffs.contains(pickupBookingId)) {
+                throw new InvalidRouteException("Missing dropoff for booking: " + pickupBookingId);
+            }
+        }
+    }
+}
