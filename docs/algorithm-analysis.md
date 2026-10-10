@@ -60,6 +60,10 @@ This document analyses in-memory planning and related functions. Runtime batchin
 
 ## Algorithmic Cost and Evidence
 
+Serviceability scans Z cached active zones in O(Z) time; cache hits avoid a DB read, not the geometric scan. Dispatch loads all drivers and performs a cool-off lookup for each status/assignment-eligible driver before sorting. That introduces up to one DB query per such driver; ranking complexity alone is not dispatch latency.
+
+Late insertion loads all PLANNED candidates and their booking data. For T trips with K total stops and maximum route length S, application work is O(K + T*S^3), followed by another O(S^3) search after locking one trip; materialized state is O(T + K + S). DB reads, refresh and lock wait time are additional. No candidate/route cap makes those costs constant.
+
 Route insertion dominates per-candidate search. A conservative global bound is $O(N^2 \cdot S^3)$, not a measured runtime model.
 
 For a fixed small route length, comparing bookings against candidate trips contributes quadratic work. With passenger turnover, route length can grow independently of seat capacity and the cubic insertion cost also matters. Neither the pending-row claim nor route length has an explicit runtime bound. Benchmark results cover only the recorded synthetic inputs, not a general demand or latency guarantee.

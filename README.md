@@ -2,17 +2,20 @@
 
 Java Spring Boot backend for the On-Demand Ride Batching case study: combine employee ride requests into shared trips while checking capacity, detour and pickup deadlines.
 
-The repository implements booking, planning, dispatch and trip mutation, PostgreSQL persistence, JWT authorization, zone caching and metrics. Some case-study flows remain incomplete; see the limitations below.
+The repository implements booking, planning, dispatch and trip mutation, PostgreSQL persistence, JWT authorization, zone caching and metrics. Window/clustering orchestration and automatic dispatch/escalation remain incomplete; [requirements traceability](docs/requirements-traceability.md) makes that boundary explicit.
 
 ## Reviewer reading order
 
-1. This README: problem, code navigation, build and local setup.
-2. [Architecture](docs/architecture.md), then [domain model](docs/domain-model.md): boundaries, booking/offer flow, persisted relationships and reachable states.
-3. [Assumptions](docs/assumptions.md) and [batching strategy](docs/batching-strategy.md): policy interpretations, insertion and localized cancellation.
-4. [Failure modes](docs/failure-modes.md) and [API contract](docs/api-design.md): transaction/access boundaries and operational limits.
-5. [Test matrix](docs/test-matrix.md), then [algorithm analysis](docs/algorithm-analysis.md): evidence and cost bounds.
+| Order | Page | Question it answers |
+| --- | --- | --- |
+| 1 | [Requirements traceability](docs/requirements-traceability.md) | What problem/invariants were requested, and which parts are implemented? |
+| 2 | [Architecture](docs/architecture.md), [domain model](docs/domain-model.md) | Where does logic live, how does a booking flow, and which states are reachable? |
+| 3 | [Assumptions](docs/assumptions.md), [batching strategy](docs/batching-strategy.md) | Which policies/approximations were chosen, and how are routes accepted or changed? |
+| 4 | [Failure modes](docs/failure-modes.md), [API contract](docs/api-design.md) | How are races/rollback handled, what is exposed, and what remains unsafe/incomplete? |
+| 5 | [Test matrix](docs/test-matrix.md), [algorithm analysis](docs/algorithm-analysis.md) | What assertions support the invariants, and what does planning cost? |
+| 6 | [Reviewer demo](docs/demo.md) | How can I reproduce evidence and make sample API calls? |
 
-Each page owns a distinct topic. Decision records explain specific trade-offs; they do not repeat the full architecture. Case-study requirements describe expected behavior, implementation decisions describe code choices, assessment approximations describe model limits, and future improvements describe work not present in this repository.
+Case-study requirements describe expected behavior; implementation decisions describe code choices; assessment approximations describe model limits; future improvements describe absent work. Each page owns its topic. Decision records explain specific trade-offs; dated benchmarks preserve historical measurements.
 
 ## Start with the important logic
 
@@ -20,7 +23,7 @@ Each page owns a distinct topic. Decision records explain specific trade-offs; t
 | --- | --- | --- |
 | How does one request become one booking? | [BookingService](src/main/java/com/ridebatching/booking/BookingService.java), [DeduplicationKeyGenerator](src/main/java/com/ridebatching/booking/DeduplicationKeyGenerator.java) | [Deduplication](docs/decisions/0005-handle-booking-deduplication.md) |
 | How are trips formed? | [BatchingService](src/main/java/com/ridebatching/batching/BatchingService.java), [BatchPlanner](src/main/java/com/ridebatching/batching/BatchPlanner.java) | [Batching flow](docs/batching-strategy.md) |
-| What makes an insertion feasible? | [TripFeasibilityEvaluator](src/main/java/com/ridebatching/batching/evaluator/TripFeasibilityEvaluator.java), [constraints](src/main/java/com/ridebatching/batching/constraint) | [Assumptions](docs/assumptions.md) |
+| What makes an insertion feasible? | [TripFeasibilityEvaluator](src/main/java/com/ridebatching/batching/evaluator/TripFeasibilityEvaluator.java), [constraints](src/main/java/com/ridebatching/batching/constraint) | [Acceptance rules](docs/batching-strategy.md#insertion-search-and-acceptance) |
 | How are routes changed? | [RouteInsertionPlanner](src/main/java/com/ridebatching/trip/RouteInsertionPlanner.java), [Trip](src/main/java/com/ridebatching/trip/Trip.java) | [Trip mutations](docs/batching-strategy.md) |
 | How are drivers selected? | [DispatchService](src/main/java/com/ridebatching/dispatch/DispatchService.java), [driver policies](src/main/java/com/ridebatching/driver) | [Dispatch lifecycle](docs/architecture.md) |
 | Where are geographic rules? | [ServiceabilityService](src/main/java/com/ridebatching/zone/ServiceabilityService.java), [geo](src/main/java/com/ridebatching/geo) | [Zone caching](docs/decisions/007-zone-caching.md) |
@@ -70,30 +73,7 @@ See [test coverage and gaps](docs/test-matrix.md) and [contribution conventions]
 
 ## Run locally
 
-1. Copy `.env.example` to `.env`. Supply `DB_PASSWORD` and a random `JWT_SECRET` of at least 32 characters. The populated file is ignored by Git.
-2. Start PostgreSQL: `docker compose up -d`. Check it with `docker compose ps`.
-3. Export the same values into the app environment. Compose loads `.env`; Spring Boot does not load it automatically.
-
-PowerShell can import this repository's simple `NAME=value` file without executing it:
-
-```powershell
-Get-Content .env | ForEach-Object {
-    if ($_ -match '^([A-Z][A-Z0-9_]*)=(.*)$') {
-        [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process')
-    }
-}
-./mvnw.cmd spring-boot:run '-Dspring-boot.run.profiles=local'
-```
-
-In a POSIX shell, export the variables before `./mvnw spring-boot:run -Dspring-boot.run.profiles=local`.
-
-The DB port is bound to loopback. `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `JWT_SECRET` and `SERVER_PORT` configure connections and secrets. Operational settings in [application.yml](src/main/resources/application.yml) support environment overrides, e.g. `APP_SLA_PICKUP_SLA_MINUTES`.
-
-Admin creation is disabled by default. For an empty account table, set `LOCAL_ADMIN_ENABLED=true`, `LOCAL_ADMIN_USERNAME` and `LOCAL_ADMIN_PASSWORD`, then start with the `local` profile. It creates only an admin; employee identities and serviceable zones must be provisioned separately. There is no destructive demo reseeding profile.
-
-The app listens on port 8080 by default. Open [Swagger UI](http://localhost:8080/swagger-ui/index.html), [OpenAPI JSON](http://localhost:8080/v3/api-docs) or [health](http://localhost:8080/actuator/health). Supported endpoints and examples are in [API design](docs/api-design.md).
-
-`docker compose down` preserves the database volume. `docker compose down -v` deletes local database data.
+Follow the [demo setup](docs/demo.md#local-http-walkthrough) for required environment values, PostgreSQL, opt-in admin bootstrap, explicit fixtures and sample requests. Defaults create no accounts or serviceable zones. The app listens on port 8080 unless SERVER_PORT is set; [Swagger UI](http://localhost:8080/swagger-ui/index.html) documents the available HTTP routes.
 
 ## Design and operational notes
 
@@ -103,12 +83,4 @@ Deduplication and trip mutation rely on PostgreSQL constraints and transactions.
 
 ## Current limitations
 
-- Window slots and leader clustering have unit coverage, but `formBatches()` claims all pending bookings and sends them directly to the planner. Window/zone/direction partitioning is not wired into that cycle.
-- Scheduling is off by default. When enabled it uses a fixed delay (default 5 seconds), independently of slot length.
-- Infeasible solo bookings remain pending. Escalation inspection exists, but no automatic producer/resolution flow exists.
-- Dispatch is callable through services/tests. There are no driver, trip-tracking, zone-management or fleet-management HTTP endpoints, and batching does not automatically dispatch offers.
-- Cancellation removes/resequences only the affected trip's stops. Feasibility revalidation, driver/offer revocation and prevention of cancellation after pickup remain gaps.
-- SLA estimates exclude driver approach time. Seat capacity bounds concurrent riders, not total stops.
-- Error mapping and JWT filtering have limits described in the failure notes. Offer expiration and trip execution have no automatic flow.
-
-These boundaries describe the implementation, not production readiness or complete case-study coverage.
+The implementation checks computed planning constraints but does not complete every case-study flow. [Traceability](docs/requirements-traceability.md) owns coverage; [failure modes](docs/failure-modes.md) owns race/recovery/operational gaps. Straight-line distance with fixed speed/circuity/dwell is an assessment approximation, not a road-network ETA or actual pickup guarantee.
