@@ -28,6 +28,11 @@ public class LocalTravelTimeEstimator implements TravelTimeEstimator {
 
     @Override
     public Duration estimateTravelTime(GeoPoint origin, GeoPoint destination) {
+        return estimateApproachTime(origin, destination).plus(stopDwellTime);
+    }
+
+    @Override
+    public Duration estimateApproachTime(GeoPoint origin, GeoPoint destination) {
         double straightLineDistanceMeters = DistanceCalculator.calculateDistanceInMetres(origin, destination);
         double roadDistanceMeters = straightLineDistanceMeters * circuityFactor;
         
@@ -36,6 +41,6 @@ public class LocalTravelTimeEstimator implements TravelTimeEstimator {
         
         long travelSeconds = (long) (roadDistanceMeters / averageSpeedMs);
         
-        return Duration.ofSeconds(travelSeconds).plus(stopDwellTime);
+        return Duration.ofSeconds(travelSeconds);
     }
 }

@@ -2,6 +2,10 @@ package com.ridebatching.dispatch;
 
 import com.ridebatching.api.DomainConflictException;
 import com.ridebatching.driver.*;
+import com.ridebatching.booking.Booking;
+import com.ridebatching.booking.BookingRepository;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import com.ridebatching.geo.GeoPoint;
 import com.ridebatching.trip.*;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -27,6 +31,9 @@ public class DispatchService {
     private final TripRepository trips;
     private final MeterRegistry metrics;
     private final Clock clock;
+    private final TripAssignmentValidator assignment;
+    private final TripRouteTiming timing;
+    private final BookingRepository bookings;
     private final Duration lifetime;
     private final int attemptLimit;
     @PersistenceContext private EntityManager entityManager;
@@ -34,6 +41,7 @@ public class DispatchService {
     public DispatchService(DriverRepository drivers, DriverOfferRepository offers,
                            DriverEligibilityPolicy eligibility, DriverProximityRanker ranker,
                            RejectionCoolOffPolicy coolOff, TripRepository trips, MeterRegistry metrics,
+                           TripAssignmentValidator assignment, TripRouteTiming timing, BookingRepository bookings,
                            @Qualifier("dispatchClock") Clock clock,
                            @Value("${dispatch.offer-lifetime:PT2M}") Duration lifetime,
                            @Value("${dispatch.max-offers-per-trip:3}") int attemptLimit) {
@@ -41,6 +49,7 @@ public class DispatchService {
             throw new IllegalArgumentException("Dispatch requires a positive offer lifetime and 1..100 attempts");
         this.drivers = drivers; this.offers = offers; this.eligibility = eligibility;
         this.ranker = ranker; this.coolOff = coolOff; this.trips = trips; this.metrics = metrics;
+        this.assignment = assignment; this.timing = timing; this.bookings = bookings;
         this.clock = clock; this.lifetime = lifetime; this.attemptLimit = attemptLimit;
     }
 
@@ -93,6 +102,9 @@ public class DispatchService {
         Instant now = clock.instant();
         rejectExpiredResponse(trip, offer, now);
         if (!eligible(driver, trip, now)) throw new DomainConflictException("Driver is no longer eligible for this trip");
+        var check = assignment.evaluate(trip, driver, routeBookings(trip), now);
+        if (!check.feasible()) throw new com.ridebatching.api.RouteInfeasibleException(check.trace().rejectionDetails());
+        timing.calculate(trip, check.firstPickupAt());
         offer.accept(now);
         trip.assignTo(driver.getId());
         driver.assignTrip(trip.getId());
@@ -114,12 +126,14 @@ public class DispatchService {
 
     private Optional<DriverOffer> advanceLocked(Trip trip, GeoPoint fallbackPickup, Instant now) {
         List<DriverOffer> history = history(trip.getId());
+        Map<UUID, Booking> riders = routeBookings(trip);
         DriverOffer active = null;
         for (DriverOffer reference : history) {
             if (reference.getStatus() != DriverOfferStatus.OFFERED) continue;
             DriverOffer offer = lockOffer(reference.getId());
             Driver driver = drivers.findById(offer.getDriverId()).orElseThrow();
-            if (active == null && !offer.hasExpired(now) && eligible(driver, trip, now)) active = offer;
+            if (active == null && !offer.hasExpired(now) && eligible(driver, trip, now)
+                    && assignment.evaluate(trip, driver, riders, now).feasible()) active = offer;
             else expire(offer, now);
         }
         if (active != null) return Optional.of(active);
@@ -127,7 +141,8 @@ public class DispatchService {
         Set<UUID> attempted = new HashSet<>();
         history.forEach(o -> attempted.add(o.getDriverId()));
         List<Driver> candidates = drivers.findAll().stream()
-                .filter(d -> !attempted.contains(d.getId()) && eligible(d, trip, now)).toList();
+                .filter(d -> !attempted.contains(d.getId()) && eligible(d, trip, now)
+                        && assignment.evaluate(trip, d, riders, now).feasible()).toList();
         List<Driver> ranked = ranker.rankByProximity(candidates,
                 trip.getStops().isEmpty() ? fallbackPickup : pickup(trip));
         if (ranked.isEmpty()) return Optional.empty();
@@ -140,6 +155,11 @@ public class DispatchService {
     private boolean eligible(Driver driver, Trip trip, Instant now) {
         return eligibility.evaluate(driver).isEligible() && driver.getVehicleCapacity() >= trip.getPeakPassengers()
                 && !coolOff.isExcludedByCoolOff(driver.getId(), trip.getId(), now);
+    }
+
+    private Map<UUID, Booking> routeBookings(Trip trip) {
+        return bookings.findAllById(trip.getStops().stream().map(TripStop::getBookingId).distinct().toList())
+                .stream().collect(Collectors.toMap(Booking::getId, Function.identity()));
     }
 
     private GeoPoint pickup(Trip trip) {
@@ -175,8 +195,10 @@ public class DispatchService {
             Set<UUID> attempted = new HashSet<>();
             history.forEach(o -> attempted.add(o.getDriverId()));
             // Ignore temporary cool-off here: an attempted driver is never offered this trip again.
+            Map<UUID, Booking> riders = routeBookings(trip);
             boolean availableUntried = drivers.findAll().stream().anyMatch(d -> !attempted.contains(d.getId())
-                    && eligibility.evaluate(d).isEligible() && d.getVehicleCapacity() >= trip.getPeakPassengers());
+                    && eligibility.evaluate(d).isEligible() && d.getVehicleCapacity() >= trip.getPeakPassengers()
+                    && assignment.evaluate(trip, d, riders, now).feasible());
             outcome = availableUntried ? DispatchOutcome.READY_FOR_RETRY
                     : history.isEmpty() ? DispatchOutcome.NO_ELIGIBLE_DRIVER : DispatchOutcome.DRIVERS_EXHAUSTED;
         }

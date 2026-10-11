@@ -98,7 +98,7 @@ class DispatchMutationRegressionIntegrationTest extends AbstractPostgresIntegrat
     @Test
     void selectionMustRespectActualVehicleCapacity() {
         Driver small = driver(2, 0);
-        Driver large = driver(4, 1);
+        Driver large = driver(4, .001);
         Trip trip = trip(4);
         assertThat(service.dispatchTrip(trip.getId(), new GeoPoint(0, 0)).orElseThrow().getDriverId())
                 .isEqualTo(large.getId()).isNotEqualTo(small.getId());
@@ -192,13 +192,18 @@ class DispatchMutationRegressionIntegrationTest extends AbstractPostgresIntegrat
         for (int i = 0; i < riders; i++) {
             UUID employeeId = UUID.randomUUID();
             Employee employee = employees.saveAndFlush(new Employee(employeeId, employeeId.toString(), "review", employeeId + "@example.invalid"));
-            Booking booking = bookings.saveAndFlush(new Booking(UUID.randomUUID(), employee, new GeoPoint(0, 0), new GeoPoint(0, 0),
+            Booking booking = bookings.saveAndFlush(new Booking(UUID.randomUUID(), employee, new GeoPoint(0, 0), new GeoPoint(.02, 0),
                     now, BookingStatus.PENDING, now.plusSeconds(3600), now, UUID.randomUUID().toString()));
             pickups.add(new TripStop(UUID.randomUUID(), booking.getId(), TripStopType.PICKUP, new GeoPoint(0, 0)));
-            drops.add(new TripStop(UUID.randomUUID(), booking.getId(), TripStopType.DROPOFF, new GeoPoint(0, 0)));
+            drops.add(new TripStop(UUID.randomUUID(), booking.getId(), TripStopType.DROPOFF, booking.getDropoffLocation()));
         }
         pickups.addAll(drops);
         trip.assignRoute(pickups);
-        return trips.saveAndFlush(trip);
+        Trip saved = trips.saveAndFlush(trip);
+        for (TripStop stop : saved.getStops()) if (stop.getType() == TripStopType.PICKUP) {
+            Booking b = bookings.findById(stop.getBookingId()).orElseThrow();
+            b.setTripId(saved.getId()); b.confirm(); bookings.saveAndFlush(b);
+        }
+        return saved;
     }
 }

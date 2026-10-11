@@ -26,6 +26,12 @@ public class GlobalExceptionHandler {
         return new ApiErrorResponse("DISPATCH_NOT_FOUND", ex.getMessage(), Instant.now(), request.getRequestURI());
     }
 
+    @ExceptionHandler(RouteInfeasibleException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ApiErrorResponse handleInfeasibleRoute(RouteInfeasibleException ex, HttpServletRequest request) {
+        return new ApiErrorResponse("ROUTE_INFEASIBLE", "Route would violate " + ex.getConstraintCode(), Instant.now(), request.getRequestURI());
+    }
+
     @ExceptionHandler({DomainConflictException.class,
             org.springframework.dao.OptimisticLockingFailureException.class,
             org.springframework.dao.PessimisticLockingFailureException.class})

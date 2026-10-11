@@ -2,6 +2,7 @@ package com.ridebatching.dispatch;
 
 import com.ridebatching.AbstractPostgresIntegrationTest;
 import com.ridebatching.driver.*;
+import com.ridebatching.booking.*;
 import com.ridebatching.geo.GeoPoint;
 import com.ridebatching.trip.*;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,12 +22,14 @@ class DispatchLifecycleIntegrationTest extends AbstractPostgresIntegrationTest {
     @Autowired DriverOfferRepository offers;
     @Autowired TripRepository trips;
     @Autowired DispatchExpiryJob expiry;
+    @Autowired BookingRepository bookings;
+    @Autowired EmployeeRepository employees;
     @MockBean(name = "dispatchClock") Clock clock;
     private UUID tripId;
 
     @BeforeEach void setup() {
         when(clock.instant()).thenReturn(NOW);
-        tripId = trips.saveAndFlush(new Trip(UUID.randomUUID(), NOW, NOW)).getId();
+        tripId = plannedTrip();
     }
 
     @Test void repeatedAdvanceKeepsOneOfferAndRejectionAutomaticallyOffersTheNextDriver() {
@@ -89,7 +92,7 @@ class DispatchLifecycleIntegrationTest extends AbstractPostgresIntegrationTest {
 
     @Test void expiryJobBoundsItsCycleAndEventuallyAdvancesEveryDueTrip() {
         driver(1); driver(2);
-        UUID otherTrip = trips.saveAndFlush(new Trip(UUID.randomUUID(), NOW, NOW)).getId();
+        UUID otherTrip = plannedTrip();
         dispatch.advanceTrip(tripId); dispatch.advanceTrip(otherTrip);
         when(clock.instant()).thenReturn(NOW.plusSeconds(120));
         assertThat(expiry.advanceExpiredOffers()).isEqualTo(1);
@@ -100,9 +103,20 @@ class DispatchLifecycleIntegrationTest extends AbstractPostgresIntegrationTest {
         assertThat(dispatch.getTrip(otherTrip).attemptsUsed()).isEqualTo(2);
     }
 
+    private UUID plannedTrip() {
+        UUID employeeId = UUID.randomUUID();
+        Employee rider = employees.saveAndFlush(new Employee(employeeId, employeeId.toString(), "Rider", employeeId + "@example.invalid"));
+        Booking b = bookings.saveAndFlush(new Booking(UUID.randomUUID(), rider, new GeoPoint(0, 0), new GeoPoint(.01, 0),
+                NOW, BookingStatus.PENDING, NOW.plusSeconds(3600), NOW, UUID.randomUUID().toString()));
+        Trip t = new Trip(UUID.randomUUID(), NOW, NOW);
+        t.assignRoute(java.util.List.of(new TripStop(UUID.randomUUID(), b.getId(), TripStopType.PICKUP, b.getPickupLocation()),
+                new TripStop(UUID.randomUUID(), b.getId(), TripStopType.DROPOFF, b.getDropoffLocation())));
+        trips.saveAndFlush(t); b.setTripId(t.getId()); b.confirm(); bookings.saveAndFlush(b); return t.getId();
+    }
+
     private Driver driver(double latitude) {
         Driver d = new Driver(UUID.randomUUID(), "Driver", 4);
-        d.updateLocation(new GeoPoint(latitude, 0)); d.goOnline();
+        d.updateLocation(new GeoPoint(latitude / 1000, 0)); d.goOnline();
         return drivers.saveAndFlush(d);
     }
 }

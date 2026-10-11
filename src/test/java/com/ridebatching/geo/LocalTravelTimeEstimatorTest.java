@@ -21,6 +21,16 @@ class LocalTravelTimeEstimatorTest {
     }
 
     @Test
+    void approachEndsAtArrivalAndDoesNotChargeDestinationDwell() {
+        var estimator = new LocalTravelTimeEstimator(1.35, 30, 120);
+        var pickup = new GeoPoint(0, 0); var driver = new GeoPoint(.01, 0);
+        assertThat(estimator.estimateApproachTime(pickup, pickup)).isEqualTo(Duration.ZERO);
+        long driving = (long) (DistanceCalculator.calculateDistanceInMetres(driver, pickup) * 1.35 / (30 / 3.6));
+        assertThat(estimator.estimateApproachTime(driver, pickup)).isEqualTo(Duration.ofSeconds(driving));
+        assertThat(estimator.estimateTravelTime(driver, pickup)).isEqualTo(Duration.ofSeconds(driving + 120));
+    }
+
+    @Test
     void shouldEstimateTravelTimeWithDwellTime() {
         // 1.35 circuity, 30km/h (8.33 m/s), 120s dwell
         LocalTravelTimeEstimator estimator = new LocalTravelTimeEstimator(1.35, 30.0, 120);

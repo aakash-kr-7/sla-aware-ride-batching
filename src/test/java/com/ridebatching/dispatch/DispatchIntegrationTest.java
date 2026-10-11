@@ -1,6 +1,11 @@
 package com.ridebatching.dispatch;
 
 import com.ridebatching.AbstractPostgresIntegrationTest;
+import com.ridebatching.booking.*;
+import com.ridebatching.trip.TripStop;
+import com.ridebatching.trip.TripStopType;
+import java.time.Instant;
+import java.util.List;
 import com.ridebatching.driver.Driver;
 import com.ridebatching.driver.DriverRepository;
 import com.ridebatching.geo.GeoPoint;
@@ -37,6 +42,8 @@ class DispatchIntegrationTest extends AbstractPostgresIntegrationTest {
     @Autowired
     private TripRepository tripRepository;
 
+    @Autowired BookingRepository bookings;
+    @Autowired EmployeeRepository employees;
     private UUID tripId;
     private GeoPoint pickupLocation;
     private Driver nearDriver;
@@ -46,9 +53,14 @@ class DispatchIntegrationTest extends AbstractPostgresIntegrationTest {
     void setup() {
         tripId = UUID.randomUUID();
         Trip trip = new Trip(tripId, java.time.Instant.now(), java.time.Instant.now());
-        tripRepository.saveAndFlush(trip);
-
         pickupLocation = new GeoPoint(12.9716, 77.5946);
+        UUID employeeId = UUID.randomUUID();
+        Employee rider = employees.saveAndFlush(new Employee(employeeId, employeeId.toString(), "Rider", employeeId + "@example.invalid"));
+        Booking b = bookings.saveAndFlush(new Booking(UUID.randomUUID(), rider, pickupLocation, new GeoPoint(12.98, 77.5946),
+                Instant.now(), BookingStatus.PENDING, Instant.now().plusSeconds(3600), Instant.now(), UUID.randomUUID().toString()));
+        trip.assignRoute(List.of(new TripStop(UUID.randomUUID(), b.getId(), TripStopType.PICKUP, b.getPickupLocation()),
+                new TripStop(UUID.randomUUID(), b.getId(), TripStopType.DROPOFF, b.getDropoffLocation())));
+        tripRepository.saveAndFlush(trip); b.setTripId(tripId); b.confirm(); bookings.saveAndFlush(b);
 
         nearDriver = new Driver(UUID.randomUUID(), "Near Driver", 4);
         nearDriver.updateLocation(new GeoPoint(12.9720, 77.5950));
@@ -56,7 +68,7 @@ class DispatchIntegrationTest extends AbstractPostgresIntegrationTest {
         driverRepository.saveAndFlush(nearDriver);
 
         farDriver = new Driver(UUID.randomUUID(), "Far Driver", 4);
-        farDriver.updateLocation(new GeoPoint(13.0, 78.0));
+        farDriver.updateLocation(new GeoPoint(13.0, 77.6));
         farDriver.goOnline();
         driverRepository.saveAndFlush(farDriver);
     }

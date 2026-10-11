@@ -12,4 +12,9 @@ public interface TravelTimeEstimator {
      *         inclusive of any required destination dwell/service time.
      */
     Duration estimateTravelTime(GeoPoint origin, GeoPoint destination);
+
+    /** Arrival at the first pickup, without destination service time when the estimator can separate it. */
+    default Duration estimateApproachTime(GeoPoint origin, GeoPoint pickup) {
+        return estimateTravelTime(origin, pickup);
+    }
 }
