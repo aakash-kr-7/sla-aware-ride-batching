@@ -11,34 +11,34 @@ The eight invariants below are desired constraints. Coverage describes where cod
 | ID / source requirement | Enforcement or current implementation | Coverage / evidence |
 | --- | --- | --- |
 | R01 Serviceability: reject unsupported pickup | `BookingService` calls `ServiceabilityService` before insert; active circles, Haversine radius inclusion and deterministic overlap choice. | Implemented at creation; dropoff is outside scope. Cached zone changes can lag and batching does not revalidate. T01. |
-| R02 Duplicate prevention: double-submit yields one booking | Same employee, normalized endpoints and slot form key; partial unique index excludes CANCELLED; losing insert reads existing ID. | Implemented for active service-created requests. Nullable direct/legacy keys and cancellation-history lookup remain limits. T02. |
-| R03 Capacity: no route exceeds seats | Evaluator computes peak onboard riders; planner supplies default capacity Vehicle, one rider per booking. | Implemented during planning. Dispatch does not reconcile actual driver's capacity. T03. |
+| R02 Duplicate prevention: double-submit yields one booking | Same employee, normalized endpoints and slot form key; partial unique index excludes CANCELLED; losing insert reads existing ID. | Implemented for active service-created requests. V11 requires non-null keys and active-only lookup handles cancelled history. Direct writers must use canonical keys. T02. |
+| R03 Capacity: no route exceeds seats | Evaluator computes peak onboard riders; planner supplies default capacity Vehicle, one rider per booking. | Implemented during planning and dispatch; actual driver capacity is checked at selection/acceptance. T03. |
 | R04 Pickup SLA: no accepted batch breaks a promise; split or escalate | Every pickup estimate <= stored deadline; no shared fit triggers a checked solo route, infeasible solo remains pending. | Partial workflow: computed feasibility/split covered; no automatic escalation or driver-approach estimate. T04. |
 | R05 Detour: keep each rider's extra travel small | Shared minus direct estimated in-vehicle duration must meet both relative and absolute bounds. | Implemented computed policy; numeric bounds are chosen assumptions, not source thresholds. Road quality is unvalidated. T05. |
 | R06 Driver eligibility: exclude active breaks, choose nearby available driver | Reject OFFLINE, ON_BREAK and active-trip drivers; rank remaining drivers by Haversine distance then ID. | Service behavior implemented; no driver HTTP/delivery flow. T06. |
-| R07 Rejection cool-off: re-offer without immediately asking same driver | Explicit re-dispatch excludes trip-specific recent REJECTED offers. | Partial: no automatic re-offer; five minutes is chosen policy measured from offer creation, not rejection. T07. |
-| R08 Local cancellation: replan just affected trip | Lock associated trip; remove cancelled rider's stops, preserve remaining order; empty trip becomes CANCELLED. | Partial execution handling: isolation covered, but no feasibility recheck, driver release or offer revoke. T08. |
+| R07 Rejection cool-off: re-offer without immediately asking same driver | Explicit re-dispatch excludes trip-specific recent REJECTED offers. | Partial: no automatic re-offer; five minutes is chosen policy measured from rejection. T07. |
+| R08 Local cancellation: replan just affected trip | Lock associated trip; remove cancelled rider's stops, preserve remaining order; empty trip becomes CANCELLED. | Partial execution handling: isolation covered, but no execution-time feasibility recheck. Empty trips release their driver and expire outstanding offers. T08. |
 
 ## Other required flows
 
 | ID / requirement | Current boundary | Evidence |
 | --- | --- | --- |
 | R09 Window + zone/direction cluster | Slot assignment and cluster component exist; runtime claim sends all pending rows directly to planner. Integration absent; time buckets do not bound demand. | T09; strategy and ADR 006 |
-| R10 Late add if SLA/capacity fit | Separate insertion transaction searches PLANNED trips, locks selected trip and re-evaluates. No insertion into executing trips. | T10; mixed mutation races remain untested |
+| R10 Late add if SLA/capacity fit | Creation/insertion share a transaction; insertion locks booking then selected PLANNED trip and re-evaluates current riders. No insertion into executing trips. | T10; cancellation/insertion and dispatch/insertion races have DB regressions |
 | R11 Booking data/progress | Employee/endpoints/creation time/slot/status/trip ID persisted; service flows reach PENDING, CONFIRMED, CANCELLED. | T11; PICKED_UP/DROPPED have no execution API, no requested-time input |
 
 ## Overall evaluation criteria
 
 | ID / criterion | Submission evidence and limits |
 | --- | --- |
-| P01 Authentication / roles | JWT login, BCrypt and method ownership/admin/approver rules; T12. Public operational endpoints and downstream JWT error capture are disclosed. |
+| P01 Authentication / roles | JWT login, BCrypt and method ownership/admin/approver rules; T12. Public operational endpoints remain a declared assessment policy; JWT failures are isolated from backend failures. |
 | P02 Time/space cost | [Algorithm analysis](algorithm-analysis.md); [dated synthetic JMH results](benchmarks/batching.md). No load or current latency guarantee. |
 | P03 System failures / backup / recovery | PostgreSQL rollback and retry test T13; [failure notes](failure-modes.md). Backup/restore and broader fault-tolerance mechanisms are absent. |
 | P04 OOP / layering | Java feature packages, controller/service/repository responsibilities and Trip aggregate; [architecture](architecture.md). Packages are not enforced modules; escalation read returns entities. |
 | P05 Trade-offs | Architecture rationale plus dedup, clustering and caching decisions; [assumptions](assumptions.md) records underspecified policy. |
 | P06 Monitoring / logging | Actuator, candidate/event metrics, correlation MDC; T14. No alerting stack or JSON encoder. Counters are not transactional success totals. |
 | P07 Caching / staleness | Active-zone Caffeine list with local eviction/TTL; T15 and ADR 007. No cross-instance invalidation. |
-| P08 Errors / exceptions | Selected 400/404/422 mappings and non-leaking token failures; T12. Other domain faults are not consistently mapped. |
+| P08 Errors / exceptions | Explicit 400/403/404/409/422 mappings and non-leaking token failures; T12. Unexpected internal failures remain server errors. |
 | Submission demonstration | [Runnable demo](demo.md) and API reference; no recorded video/screenshots are committed. Commit history is retained. |
 
 Use [test matrix](test-matrix.md) for T01-T15 assertions and coverage gaps. Implementation decisions/assessment approximations live in [assumptions](assumptions.md); future improvements are identified in [failure notes](failure-modes.md#future-improvements). Missing flows are not hidden behind standalone component tests.

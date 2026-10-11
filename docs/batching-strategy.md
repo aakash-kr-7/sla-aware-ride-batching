@@ -33,7 +33,7 @@ The insertion component does not know deadlines or capacity. [BatchPlanner](../s
 
 | Check | Acceptance rule |
 | --- | --- |
-| Structure | Pickup before dropoff, valid onboard progression and no missing dropoff; `Trip.assignRoute` also rejects repeated pickup/dropoff pairs |
+| Structure | Pickup before dropoff, valid onboard progression, no repeated pickup/drop pairs and no missing dropoff; `Trip.assignRoute` validates the same route structure |
 | Capacity | Peak concurrent passengers <= planning seats; one booking represents one rider |
 | Pickup SLA | Estimated pickup <= stored deadline for every booking; equality is accepted |
 | Detour | For each rider, extra in-vehicle time <= both absolute limit and relative limit times direct estimated duration |
@@ -60,8 +60,8 @@ Booking mutations use booking-then-trip lock order. PostgreSQL regressions cover
 
 ```mermaid
 flowchart TD
-    Cancel[Cancel request] --> Owner[Load booking and verify supplied employee]
-    Owner --> State[Set CANCELLED; reject DROPPED]
+    Cancel[Cancel request] --> Owner[Lock/reload booking and verify employee]
+    Owner --> State[Set CANCELLED; reject PICKED_UP/DROPPED]
     State --> HasTrip{Associated trip?}
     HasTrip -->|No| Commit[Save booking and commit]
     HasTrip -->|Yes| Lock[Lock only associated trip]
@@ -69,8 +69,9 @@ flowchart TD
     Remove --> Empty{No stops remain?}
     Empty -->|Yes| CancelTrip[Set trip CANCELLED]
     Empty -->|No| Resequence[Preserve remaining order; resequence from 1]
-    CancelTrip --> Commit
+    CancelTrip --> Release[Expire outstanding offers and release matching driver]
+    Release --> Commit
     Resequence --> Commit
 ```
 
-This implements localized stop removal, not a fresh route optimization. Unrelated trips are untouched. Cancellation is state-idempotent, currently allows `PICKED_UP`, retains the booking's trip ID, and performs no feasibility recheck or offer/driver cleanup. Without road-metric assumptions, deleting a stop is not proof that every remaining ETA improves. [Tests](test-matrix.md) verify isolation, not complete execution-time replanning.
+This implements localized stop removal, not a fresh route optimization. Unrelated trips are untouched. Cancellation is state-idempotent, rejects `PICKED_UP`/`DROPPED`, retains the booking's trip ID, and expires outstanding offers/releases the matching driver when the trip becomes empty. There is no execution-time feasibility recheck. Without road-metric assumptions, deleting a stop is not proof that every remaining ETA improves. [Tests](test-matrix.md) verify isolation, concurrent mutation and empty-trip cleanup; they do not establish complete execution-time replanning.

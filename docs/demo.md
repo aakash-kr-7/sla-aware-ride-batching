@@ -5,10 +5,10 @@
 With JDK 17+ and Docker running, use the wrapper. This selection uses disposable PostgreSQL, seeds its own fixtures and needs no populated `.env`:
 
 ```sh
-./mvnw '-Dtest=ServiceabilityServiceTest,BookingConcurrencyIntegrationTest,BatchPlannerAcceptanceTest,DetourConstraintTest,DriverEligibilityPolicyTest,DispatchIntegrationTest,TripMutationConcurrencyIntegrationTest,BookingCancellationIntegrationTest' test
+./mvnw '-Dtest=ServiceabilityServiceTest,BookingConcurrencyIntegrationTest,BatchPlannerAcceptanceTest,DetourConstraintTest,DriverEligibilityPolicyTest,DispatchIntegrationTest,TripMutationConcurrencyIntegrationTest,BookingCancellationIntegrationTest,BookingMutationRegressionIntegrationTest,DispatchMutationRegressionIntegrationTest,ConcurrentBatchingIntegrationTest' test
 ```
 
-On PowerShell substitute `./mvnw.cmd`; keep the quoted `-Dtest` argument. Read assertions/output in this order: serviceable pickup, duplicate race, four-plus-one/SLA split/expired pending, detour rejection, driver eligibility, explicit rejection/re-offer and competing acceptance, late-insertion capacity race, cancellation isolation. [Test matrix](test-matrix.md) states the limits of each scenario.
+On PowerShell substitute `./mvnw.cmd`; keep the quoted `-Dtest` argument. Read assertions/output in this order: serviceable pickup, duplicate race, four-plus-one/SLA split/expired pending, detour rejection, driver eligibility, explicit rejection/re-offer and competing acceptance, late-insertion capacity race, cancellation isolation, stale/concurrent booking mutation, cross-trip driver competition and overlapping batching claims. [Test matrix](test-matrix.md) states the limits of each scenario.
 
 Run `./mvnw clean verify` for the full submission check. The selected demo is not a load test. No recorded video or screenshots are committed.
 

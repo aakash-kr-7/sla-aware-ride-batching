@@ -15,6 +15,8 @@ The repository implements booking, planning, dispatch and trip mutation, Postgre
 | 5 | [Test matrix](docs/test-matrix.md), [algorithm analysis](docs/algorithm-analysis.md) | What assertions support the invariants, and what does planning cost? |
 | 6 | [Reviewer demo](docs/demo.md) | How can I reproduce evidence and make sample API calls? |
 
+The [correctness review](docs/correctness-review.md) records source-cited defects, regression evidence, fixes and deferred concerns.
+
 Case-study requirements describe expected behavior; implementation decisions describe code choices; assessment approximations describe model limits; future improvements describe absent work. Each page owns its topic. Decision records explain specific trade-offs; dated benchmarks preserve historical measurements.
 
 ## Start with the important logic
