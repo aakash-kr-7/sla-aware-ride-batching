@@ -26,7 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ThreadLocalRandom;
+import java.util.Random;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -72,9 +72,10 @@ class RoutePlannerInvariantTest {
     
     @RepeatedTest(100)
     @DisplayName("Route planner invariants hold for random bookings")
-    void testRoutePlannerInvariants() {
-        Instant routeStartTime = Instant.now();
-        List<Booking> bookings = generateRandomBookings(10, routeStartTime);
+    void testRoutePlannerInvariants(org.junit.jupiter.api.RepetitionInfo repetition) {
+        long seed = 20261011L + repetition.getCurrentRepetition();
+        Instant routeStartTime = Instant.parse("2026-10-11T00:00:00Z");
+        List<Booking> bookings = generateRandomBookings(10, routeStartTime, new Random(seed));
         
         List<Trip> trips = batchPlanner.planBatch(bookings, routeStartTime);
         
@@ -110,6 +111,8 @@ class RoutePlannerInvariantTest {
                     assertTrue(droppedOff.add(bId), "Duplicate dropoff for booking " + bId);
                 }
             }
+            assertThat(droppedOff).as("All pickups have one dropoff, seed=%s", seed).isEqualTo(pickedUp);
+            assertThat(currentLoad).isZero();
             
             // Collect to verify global "at most once" later
             for (UUID bId : pickedUp) {
@@ -135,15 +138,32 @@ class RoutePlannerInvariantTest {
                 }
                 
             }
+
+            // Independently reconstruct every rider's in-vehicle duration instead of trusting the evaluator's verdict.
+            Map<UUID, Duration> pickupTimes = new java.util.HashMap<>();
+            Duration elapsed = Duration.ZERO;
+            for (int i = 0; i < route.size(); i++) {
+                TripStop stop = route.get(i);
+                if (i > 0) elapsed = elapsed.plus(estimator.estimateTravelTime(route.get(i - 1).getLocation(), stop.getLocation()));
+                if (stop.getType() == TripStopType.PICKUP) {
+                    pickupTimes.put(stop.getBookingId(), elapsed);
+                } else {
+                    Booking rider = bookingMap.get(stop.getBookingId());
+                    Duration direct = estimator.estimateTravelTime(rider.getPickupLocation(), rider.getDropoffLocation());
+                    Duration extra = elapsed.minus(pickupTimes.get(rider.getId())).minus(direct);
+                    assertThat(extra).as("Absolute detour, seed=%s, rider=%s", seed, rider.getId()).isLessThanOrEqualTo(MAX_ABSOLUTE_DETOUR);
+                    assertThat(extra.toMillis()).as("Relative detour, seed=%s, rider=%s", seed, rider.getId())
+                            .isLessThanOrEqualTo((long) (direct.toMillis() * MAX_RELATIVE_DETOUR));
+                }
+            }
         }
     }
     
-    private List<Booking> generateRandomBookings(int count, Instant baseTime) {
-        ThreadLocalRandom rand = ThreadLocalRandom.current();
+    private List<Booking> generateRandomBookings(int count, Instant baseTime, Random rand) {
         List<Booking> list = new ArrayList<>();
         
         for (int i = 0; i < count; i++) {
-            Employee emp = new Employee(UUID.randomUUID(), "EMP" + i, "Name", "email@test.com");
+            Employee emp = new Employee(new UUID(rand.nextLong(), rand.nextLong()), "EMP" + i, "Name", "email@test.com");
             // Random coordinates within a small bounding box
             GeoPoint pickup = new GeoPoint(rand.nextDouble(12.0, 13.0), rand.nextDouble(77.0, 78.0));
             GeoPoint dropoff = new GeoPoint(rand.nextDouble(12.0, 13.0), rand.nextDouble(77.0, 78.0));
@@ -152,7 +172,7 @@ class RoutePlannerInvariantTest {
             Instant sla = baseTime.plus(Duration.ofMinutes(rand.nextInt(10, 60)));
             
             Booking b = new Booking(
-                UUID.randomUUID(),
+                new UUID(rand.nextLong(), rand.nextLong()),
                 emp,
                 pickup,
                 dropoff,

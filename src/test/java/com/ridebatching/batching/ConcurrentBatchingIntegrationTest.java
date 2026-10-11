@@ -39,6 +39,44 @@ class ConcurrentBatchingIntegrationTest extends AbstractPostgresIntegrationTest 
     private TripRepository tripRepository;
 
     private Employee testEmployee;
+    @org.springframework.boot.test.mock.mockito.SpyBean
+    private BatchPlanner planner;
+    @Autowired private org.springframework.jdbc.core.JdbcTemplate jdbc;
+
+    @Test
+    void competingWorkerMustSkipRowsWhileFirstWorkerIsStillPlanning() throws Exception {
+        Instant now = Instant.now();
+        Booking booking = bookingRepository.saveAndFlush(new Booking(UUID.randomUUID(), testEmployee,
+                new GeoPoint(0, 0), new GeoPoint(0, 0), now, BookingStatus.PENDING,
+                now.plusSeconds(3600), now, UUID.randomUUID().toString()));
+        var planning = new java.util.concurrent.CountDownLatch(1);
+        var resume = new java.util.concurrent.CountDownLatch(1);
+        org.mockito.Mockito.doAnswer(invocation -> {
+            planning.countDown();
+            assertThat(resume.await(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            return invocation.callRealMethod();
+        }).when(planner).planBatch(org.mockito.ArgumentMatchers.anyList(), org.mockito.ArgumentMatchers.any());
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<BatchingService.BatchingResult> first = executor.submit(batchingService::formBatches);
+            assertThat(planning.await(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            Future<BatchingService.BatchingResult> second = executor.submit(batchingService::formBatches);
+            assertThat(second.get(10, java.util.concurrent.TimeUnit.SECONDS).bookingsConsidered()).isZero();
+            resume.countDown();
+            assertThat(first.get(10, java.util.concurrent.TimeUnit.SECONDS).bookingsConsidered()).isEqualTo(1);
+            Booking assigned = bookingRepository.findById(booking.getId()).orElseThrow();
+            assertThat(assigned.getStatus()).isEqualTo(BookingStatus.CONFIRMED);
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM trip_stops WHERE booking_id=? AND trip_id=?", Integer.class,
+                    assigned.getId(), assigned.getTripId())).isEqualTo(2);
+            assertThat(jdbc.queryForObject("SELECT count(DISTINCT type) FROM trip_stops WHERE booking_id=?", Integer.class,
+                    assigned.getId())).isEqualTo(2);
+            assertThat(tripRepository.count()).isEqualTo(1);
+        } finally {
+            resume.countDown();
+            executor.shutdownNow();
+            assertThat(executor.awaitTermination(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+        }
+    }
 
 
 
