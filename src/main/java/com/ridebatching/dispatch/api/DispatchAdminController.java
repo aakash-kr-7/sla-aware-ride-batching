@@ -17,13 +17,13 @@ public class DispatchAdminController {
     public DispatchAdminController(DispatchService dispatch) { this.dispatch = dispatch; }
 
     @GetMapping("/trips")
-    @Operation(summary = "List trips, routes and dispatch outcomes", description = "Admin only. Newest trips first; page is zero-based and size must be 1..100 (default 20). Inspect peakPassengers, stop booking IDs, activeOfferId, attemptsUsed and offer history. Reading never advances dispatch.")
+    @Operation(summary = "List trips, routes and dispatch outcomes", description = "Admin only. Newest trips first; page is zero-based and size must be 1..100 (default 20). Inspect bookingIds, ordered stops, peakPassengers beside planningCapacity, driver association and offer history. Pickup stops show stored estimatedArrivalAt, pickupSlaDeadline and withinPickupSla; dropoffs and unknown legacy estimates have null SLA results. Planning capacity is current configuration, not the assigned driver's seats or a historical snapshot. Reading never advances dispatch or retimestamps routes.")
     public Page<DispatchView> list(@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
         return dispatch.listTrips(page, size);
     }
 
     @GetMapping("/trips/{tripId}")
-    @Operation(summary = "Inspect one trip and its offer history", description = "Admin only. OFFER_EXPIRED means the stored outstanding offer has reached its deadline; the expiry job or Advance will process it. CONFIRMED bookings and PLANNED trips do not imply driver assignment.")
+    @Operation(summary = "Inspect one trip, grouped bookings and pickup promises", description = "Admin only. Compare bookingIds and ordered stops to see sharing; peakPassengers is simultaneous occupancy and planningCapacity is the current configured planning limit. Pickup rows expose saved estimates beside stored deadlines, not actual arrivals or a live ETA recalculation. Acceptance refreshes estimates with driver approach; pending-offer estimates remain optimistic. OFFER_EXPIRED means the outstanding offer has reached its deadline; the expiry job or Advance processes it. CONFIRMED bookings and PLANNED trips do not imply driver assignment.")
     public DispatchView get(@PathVariable UUID tripId) { return dispatch.getTrip(tripId); }
 
     @PostMapping("/trips/{tripId}/advance")

@@ -34,6 +34,7 @@ public class DispatchService {
     private final TripAssignmentValidator assignment;
     private final TripRouteTiming timing;
     private final BookingRepository bookings;
+    private final com.ridebatching.batching.BatchPlanner planner;
     private final Duration lifetime;
     private final int attemptLimit;
     @PersistenceContext private EntityManager entityManager;
@@ -42,6 +43,7 @@ public class DispatchService {
                            DriverEligibilityPolicy eligibility, DriverProximityRanker ranker,
                            RejectionCoolOffPolicy coolOff, TripRepository trips, MeterRegistry metrics,
                            TripAssignmentValidator assignment, TripRouteTiming timing, BookingRepository bookings,
+                           com.ridebatching.batching.BatchPlanner planner,
                            @Qualifier("dispatchClock") Clock clock,
                            @Value("${dispatch.offer-lifetime:PT2M}") Duration lifetime,
                            @Value("${dispatch.max-offers-per-trip:3}") int attemptLimit) {
@@ -49,7 +51,7 @@ public class DispatchService {
             throw new IllegalArgumentException("Dispatch requires a positive offer lifetime and 1..100 attempts");
         this.drivers = drivers; this.offers = offers; this.eligibility = eligibility;
         this.ranker = ranker; this.coolOff = coolOff; this.trips = trips; this.metrics = metrics;
-        this.assignment = assignment; this.timing = timing; this.bookings = bookings;
+        this.assignment = assignment; this.timing = timing; this.bookings = bookings; this.planner = planner;
         this.clock = clock; this.lifetime = lifetime; this.attemptLimit = attemptLimit;
     }
 
@@ -181,6 +183,7 @@ public class DispatchService {
     }
 
     private DispatchView view(Trip trip, Instant now) {
+        Map<UUID, Booking> riders = routeBookings(trip);
         List<DriverOffer> history = history(trip.getId());
         DriverOffer active = history.stream().filter(o -> o.getStatus() == DriverOfferStatus.OFFERED).findFirst().orElse(null);
         DispatchOutcome outcome;
@@ -195,7 +198,6 @@ public class DispatchService {
             Set<UUID> attempted = new HashSet<>();
             history.forEach(o -> attempted.add(o.getDriverId()));
             // Ignore temporary cool-off here: an attempted driver is never offered this trip again.
-            Map<UUID, Booking> riders = routeBookings(trip);
             boolean availableUntried = drivers.findAll().stream().anyMatch(d -> !attempted.contains(d.getId())
                     && eligibility.evaluate(d).isEligible() && d.getVehicleCapacity() >= trip.getPeakPassengers()
                     && assignment.evaluate(trip, d, riders, now).feasible());
@@ -206,7 +208,12 @@ public class DispatchService {
                 active == null ? null : active.getId(), history.size(), attemptLimit,
                 history.stream().map(o -> new DispatchView.Offer(o.getId(), o.getDriverId(), o.getStatus(),
                         o.getCreatedAt(), o.getExpiresAt(), o.getUpdatedAt())).toList(),
-                trip.getStops().stream().map(s -> new DispatchView.Stop(s.getSequenceOrder(), s.getBookingId(), s.getType(), s.getLocation(), s.getEstimatedArrivalAt())).toList());
+                trip.getStops().stream().map(s -> {
+                    Instant deadline = s.getType() == TripStopType.PICKUP ? riders.get(s.getBookingId()).getPickupSlaDeadline() : null;
+                    Boolean within = deadline == null || s.getEstimatedArrivalAt() == null ? null : !s.getEstimatedArrivalAt().isAfter(deadline);
+                    return new DispatchView.Stop(s.getSequenceOrder(), s.getBookingId(), s.getType(), s.getLocation(), s.getEstimatedArrivalAt(), deadline, within);
+                }).toList(), planner.getDefaultVehicleCapacity(),
+                trip.getStops().stream().map(TripStop::getBookingId).distinct().toList());
     }
 
     private List<DriverOffer> history(UUID tripId) {
