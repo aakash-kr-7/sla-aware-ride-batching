@@ -10,6 +10,6 @@ Use a stored deterministic key and PostgreSQL's partial unique index, not an exi
 
 ## Trade-offs and scope
 
-V4 replaces the earlier coordinate-expression index with `idx_bookings_dedup` on `deduplication_key`, excluding CANCELLED rows. There is no separate client idempotency token. Direct/legacy rows can contain null keys, so the database index alone does not deduplicate every possible write.
+V4 replaces the earlier coordinate-expression index with `idx_bookings_dedup` on `deduplication_key`, excluding CANCELLED rows. There is no separate client idempotency token. V11 requires non-null keys; a legacy database with null keys needs explicit identity repair before upgrade. Direct writers must still use the canonical key normalization.
 
 A failure in late insertion rolls back creation too. PostgreSQL regressions cover concurrent duplicate creation, repeated cancel/rebook history and injected insertion failure; see [failure modes](../failure-modes.md).

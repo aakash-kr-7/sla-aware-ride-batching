@@ -2,7 +2,7 @@
 
 ## Transaction ownership
 
-Correctness relies on PostgreSQL constraints/locks, not JVM-local locks. There are no entity version fields or distributed locks. The table describes current coordination and its scope; it does not establish all possible race safety.
+Correctness relies on PostgreSQL constraints/locks, not JVM-local locks. Driver has an optimistic-lock version for stale detached saves; service assignment also uses row locks. There are no distributed locks. The table describes current coordination and its scope; it does not establish all possible race safety.
 
 | Case | Mechanism and outcome | Evidence / boundary |
 | --- | --- | --- |
@@ -12,7 +12,7 @@ Correctness relies on PostgreSQL constraints/locks, not JVM-local locks. There a
 | Cancellation mutation | One transaction locks booking, checks ownership, cancels it, locks only associated trip and removes/resequences stops. | [BookingCancellationIntegrationTest](../src/test/java/com/ridebatching/booking/BookingCancellationIntegrationTest.java): affected trip loses two stops; another keeps stop count and update timestamp. Mutation regression forces an actual PostgreSQL booking lock wait during concurrent insertion/cancellation. |
 | Competing acceptance | One transaction locks/reloads trip, offer and driver in that order, rechecks eligibility/capacity and assigns them. Partial unique index also allows at most one ACCEPTED offer per trip. Failure rolls back offer and assignments. | [DispatchIntegrationTest](../src/test/java/com/ridebatching/dispatch/DispatchIntegrationTest.java): two offers race, one succeeds, loser stays OFFERED. [DispatchMutationRegressionIntegrationTest](../src/test/java/com/ridebatching/dispatch/DispatchMutationRegressionIntegrationTest.java) forces actual DB lock waits for same-driver/different-trip acceptance and acceptance/rejection races. |
 
-Nullable legacy/direct-write dedup keys remain outside the service guarantee. See [ADR 005](decisions/0005-handle-booking-deduplication.md). Trip and booking locks cover the tested mutation interleavings; they do not imply driver race safety or optimal grouping.
+V11 makes dedup keys non-null and adds assignment foreign keys and deferred route uniqueness constraints. See [ADR 005](decisions/0005-handle-booking-deduplication.md). Trip and booking locks cover the tested mutation interleavings; they do not imply fairness or optimal grouping.
 
 ## Failure and recovery
 
@@ -26,7 +26,7 @@ Nullable legacy/direct-write dedup keys remain outside the service guarantee. Se
 | Zone changed outside annotated repository writes | Local cached list can remain stale until expiry, potentially accepting a now-unsupported pickup. | See [cache decision](decisions/007-zone-caching.md) for eviction scope. No cross-instance invalidation or batching-time revalidation. |
 | Invalid token / domain exception | Token failures produce non-leaking 401; global handler maps selected domain/validation faults. | JWT filter propagates downstream/database failures. Explicit domain and lock conflicts map to non-leaking 409, ownership denials to 403 and invalid arguments to 400. Missing JWT subject/expiration is invalid. See [API](api-design.md). |
 
-Flyway V8/V10 were corrected during repository hygiene for fresh-schema blockers (wrong employee FK target, existing index name). If an external DB already applied manually repaired versions, compare schema and checksums before upgrading; do not blindly run `flyway repair`. Other migration history is retained.
+Flyway V8/V10 were corrected during repository hygiene for fresh-schema blockers (wrong employee FK target, existing index name). If an external DB already applied manually repaired versions, compare schema and checksums before upgrading; do not blindly run `flyway repair`. V11 is a forward migration: existing null keys, dangling assignment IDs or duplicate route rows must be repaired before upgrade. It fails rather than invent identities or delete historical data. Other migration history is retained.
 
 ## Health, metrics and logs
 

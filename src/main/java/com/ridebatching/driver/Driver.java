@@ -30,6 +30,8 @@ public class Driver {
     private int vehicleCapacity;
 
     private Instant updatedAt;
+    @jakarta.persistence.Version
+    private Long version;
 
     protected Driver() {
         // JPA required
