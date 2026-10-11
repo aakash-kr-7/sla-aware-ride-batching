@@ -40,4 +40,20 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
         value = "SELECT * FROM bookings WHERE status = 'PENDING' FOR UPDATE SKIP LOCKED", 
         nativeQuery = true)
     java.util.List<Booking> findPendingBookingsForBatching();
+
+    // The transaction holds these booking locks through route persistence and confirmation.
+    @org.springframework.data.jpa.repository.Query(value = """
+        SELECT * FROM bookings
+        WHERE status = 'PENDING' AND trip_id IS NULL
+          AND created_at <= :now AND pickup_sla_deadline >= :now
+          AND (created_at < :closedWindowsBefore OR pickup_sla_deadline <= :urgentDeadlineThrough)
+        ORDER BY pickup_sla_deadline, created_at, id
+        LIMIT :claimLimit
+        FOR UPDATE SKIP LOCKED
+        """, nativeQuery = true)
+    java.util.List<Booking> claimEligibleBookings(
+            @org.springframework.data.repository.query.Param("now") java.time.Instant now,
+            @org.springframework.data.repository.query.Param("closedWindowsBefore") java.time.Instant closedWindowsBefore,
+            @org.springframework.data.repository.query.Param("urgentDeadlineThrough") java.time.Instant urgentDeadlineThrough,
+            @org.springframework.data.repository.query.Param("claimLimit") int claimLimit);
 }

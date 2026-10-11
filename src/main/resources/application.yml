@@ -43,6 +43,8 @@ app:
       expiration-ms: 3600000
   batching:
     window-duration-minutes: 15
+    max-bookings-per-cycle: 100
+    urgent-lead-time-seconds: 300
     max-bearing-angle-diff-degrees: 45
     max-relative-detour-ratio: 1.0
     max-absolute-detour-minutes: 30
