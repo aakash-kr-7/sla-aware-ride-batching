@@ -137,6 +137,25 @@ public class DispatchService {
         return tripRepository.findById(id).orElseThrow();
     }
 
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
+    public void cancelTripAssignments(UUID tripId) {
+        // Join cancellation's transaction and lock the persisted trip before releasing any assignments.
+        Trip trip = lockTrip(tripId);
+        if (trip.getStatus() != TripStatus.CANCELLED) {
+            throw new IllegalStateException("Only cancelled trips can release assignments");
+        }
+        for (DriverOffer reference : offerRepository.findByTripId(trip.getId())) {
+            DriverOffer offer = offerRepository.findByIdForUpdate(reference.getId()).orElseThrow();
+            entityManager.refresh(offer);
+            if (offer.getStatus() == DriverOfferStatus.OFFERED) offer.expire();
+        }
+        if (trip.getDriverId() != null) {
+            Driver driver = driverRepository.findByIdForUpdate(trip.getDriverId()).orElseThrow();
+            entityManager.refresh(driver);
+            if (trip.getId().equals(driver.getActiveTripId())) driver.completeTrip();
+        }
+    }
+
     private void requirePlanned(Trip trip) {
         if (trip.getStatus() != TripStatus.PLANNED) {
             throw new IllegalStateException("Only planned trips can receive new driver assignments");

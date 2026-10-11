@@ -39,6 +39,7 @@ public class BookingService {
     private final TripRepository tripRepository;
     private final BatchingService batchingService;
     private final MeterRegistry meterRegistry;
+    private final com.ridebatching.dispatch.DispatchService dispatchService;
 
     public BookingService(BookingRepository bookingRepository,
                           EmployeeRepository employeeRepository,
@@ -47,7 +48,8 @@ public class BookingService {
                           AppProperties appProperties,
                           TripRepository tripRepository,
                           @org.springframework.context.annotation.Lazy BatchingService batchingService,
-                          MeterRegistry meterRegistry) {
+                          MeterRegistry meterRegistry,
+                          com.ridebatching.dispatch.DispatchService dispatchService) {
         this.bookingRepository = bookingRepository;
         this.employeeRepository = employeeRepository;
         this.serviceabilityService = serviceabilityService;
@@ -56,6 +58,7 @@ public class BookingService {
         this.tripRepository = tripRepository;
         this.batchingService = batchingService;
         this.meterRegistry = meterRegistry;
+        this.dispatchService = dispatchService;
     }
 
     @Transactional
@@ -133,6 +136,9 @@ public class BookingService {
                     .orElseThrow(() -> new IllegalStateException("Trip not found for booking"));
             trip.removeBooking(bookingId);
             tripRepository.save(trip);
+            if (trip.getStatus() == com.ridebatching.trip.TripStatus.CANCELLED) {
+                dispatchService.cancelTripAssignments(trip.getId());
+            }
             
             meterRegistry.counter("bookings.cancellation_replans").increment();
             log.info("Cancellation replan: Removed booking from existing trip");

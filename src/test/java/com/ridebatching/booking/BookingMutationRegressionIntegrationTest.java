@@ -6,6 +6,8 @@ import com.ridebatching.batching.BatchingService;
 import com.ridebatching.booking.dto.BookingRequest;
 import com.ridebatching.booking.dto.GeoPointDto;
 import com.ridebatching.geo.GeoPoint;
+import com.ridebatching.dispatch.*;
+import com.ridebatching.driver.*;
 import com.ridebatching.trip.*;
 import com.ridebatching.zone.ServiceableZone;
 import com.ridebatching.zone.ServiceableZoneRepository;
@@ -34,9 +36,56 @@ class BookingMutationRegressionIntegrationTest extends AbstractPostgresIntegrati
     @Autowired ServiceableZoneRepository zones;
     @Autowired TransactionTemplate transaction;
     @Autowired JdbcTemplate jdbc;
+    @Autowired DriverRepository drivers;
+    @Autowired DriverOfferRepository offers;
+    @Autowired DispatchService dispatch;
     @SpyBean BatchingService batching;
     @SpyBean BatchPlanner planner;
     @SpyBean DeduplicationKeyGenerator keys;
+
+    @Test
+    void cancellingLastRiderReleasesOnlyTheirAssignedDriver() {
+        Booking booking = booking(employee(), 3600);
+        Trip trip = trip(booking);
+        Driver driver = availableDriver();
+        Driver unrelated = availableDriver();
+        Trip other = trip(booking(employee(), 3600));
+        dispatch.acceptOffer(offers.saveAndFlush(new DriverOffer(UUID.randomUUID(), driver.getId(), trip.getId())).getId());
+        dispatch.acceptOffer(offers.saveAndFlush(new DriverOffer(UUID.randomUUID(), unrelated.getId(), other.getId())).getId());
+        service.cancelBooking(booking.getEmployee().getId(), booking.getId());
+        assertThat(drivers.findById(driver.getId()).orElseThrow().getActiveTripId()).isNull();
+        assertThat(trips.findById(trip.getId()).orElseThrow().getStatus()).isEqualTo(TripStatus.CANCELLED);
+        assertThat(drivers.findById(unrelated.getId()).orElseThrow().getActiveTripId()).isEqualTo(other.getId());
+        assertThat(trips.findById(other.getId()).orElseThrow().getStatus()).isEqualTo(TripStatus.DISPATCHED);
+    }
+
+    @Test
+    void cancellingLastRiderExpiresOutstandingOffers() {
+        Booking booking = booking(employee(), 3600);
+        Trip trip = trip(booking);
+        DriverOffer offer = offers.saveAndFlush(new DriverOffer(UUID.randomUUID(), availableDriver().getId(), trip.getId()));
+        service.cancelBooking(booking.getEmployee().getId(), booking.getId());
+        assertThat(offers.findById(offer.getId()).orElseThrow().getStatus()).isEqualTo(DriverOfferStatus.EXPIRED);
+        assertThatThrownBy(() -> dispatch.acceptOffer(offer.getId())).isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void pickedUpRiderCannotBeRemovedByCancellation() {
+        Booking booking = booking(employee(), 3600);
+        Trip trip = trip(booking);
+        jdbc.update("UPDATE bookings SET status='PICKED_UP' WHERE id=?", booking.getId());
+        assertThatThrownBy(() -> service.cancelBooking(booking.getEmployee().getId(), booking.getId()))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(bookings.findById(booking.getId()).orElseThrow().getStatus()).isEqualTo(BookingStatus.PICKED_UP);
+        assertThat(stopCount(booking.getId())).isEqualTo(2);
+        assertThat(trips.findById(trip.getId()).orElseThrow().getStatus()).isEqualTo(TripStatus.PLANNED);
+    }
+
+    private Driver availableDriver() {
+        Driver driver = new Driver(UUID.randomUUID(), "review", 4);
+        driver.goOnline();
+        return drivers.saveAndFlush(driver);
+    }
 
     @Test
     void insertionFailureMustRollBackNewBooking() {
@@ -176,6 +225,8 @@ class BookingMutationRegressionIntegrationTest extends AbstractPostgresIntegrati
     private BookingRequest request() { return new BookingRequest(new GeoPointDto(0.0, 0.0), new GeoPointDto(0.0, 0.0)); }
     private int stopCount(UUID id) { return jdbc.queryForObject("SELECT count(*) FROM trip_stops WHERE booking_id=?", Integer.class, id); }
     private boolean blocked(String name) {
+        // PostgreSQL caches statistics snapshots within a transaction; refresh each observation.
+        jdbc.execute("SELECT pg_stat_clear_snapshot()");
         return Boolean.TRUE.equals(jdbc.queryForObject("SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE application_name=? AND wait_event_type='Lock')", Boolean.class, name));
     }
     private void await(BooleanSupplier condition) {

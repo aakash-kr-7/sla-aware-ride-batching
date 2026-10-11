@@ -133,6 +133,7 @@ class DispatchMutationRegressionIntegrationTest extends AbstractPostgresIntegrat
     private void awaitBlocked(String name) {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
         while (System.nanoTime() < deadline) {
+            jdbc.execute("SELECT pg_stat_clear_snapshot()");
             if (Boolean.TRUE.equals(jdbc.queryForObject("SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE application_name=? AND wait_event_type='Lock')", Boolean.class, name))) return;
             LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(10));
         }

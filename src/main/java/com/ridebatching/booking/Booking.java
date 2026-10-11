@@ -90,7 +90,7 @@ public class Booking {
         if (this.status == BookingStatus.CANCELLED) {
             return; // Idempotent
         }
-        if (this.status == BookingStatus.DROPPED) {
+        if (this.status != BookingStatus.PENDING && this.status != BookingStatus.CONFIRMED) {
             throw new IllegalStateException("Booking cannot be cancelled from status: " + this.status);
         }
         

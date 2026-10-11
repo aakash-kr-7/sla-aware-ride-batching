@@ -49,12 +49,12 @@ stateDiagram-v2
     }
 ```
 
-These are service-reachable transitions, not all enum values or setter capabilities. Booking `PICKED_UP`/`DROPPED` and trip `OFFERED`/`IN_PROGRESS`/`COMPLETED` have no execution workflow. A booking already in PICKED_UP can currently be cancelled; DROPPED cannot. Cancelling retains its trip ID. `Trip.windowStartTime` records planning route-start time, not a collection bucket.
+These are service-reachable transitions, not all enum values or setter capabilities. Booking `PICKED_UP`/`DROPPED` and trip `OFFERED`/`IN_PROGRESS`/`COMPLETED` have no execution workflow. Cancellation accepts PENDING/CONFIRMED and is idempotent for CANCELLED; PICKED_UP/DROPPED are rejected. Cancelling retains its trip ID. `Trip.windowStartTime` records planning route-start time, not a collection bucket.
 
 `Trip.assignRoute` rejects duplicate pickup/dropoff, missing dropoff and dropoff-before-pickup. It sequences stops from 1 and owns cascaded persistence/orphan removal. Stops have no ETA, arrival or visited fields. `vehicleId` is not populated by the current planner; `Vehicle`/`Capacity` are values, not fleet records.
 
 Driver domain methods support OFFLINE -> AVAILABLE, AVAILABLE -> ON_BREAK, ON_BREAK -> AVAILABLE and going offline when no active trip exists. Assignment retains AVAILABLE and sets activeTripId; `completeTrip` clears that reference, but no application execution flow calls it. There is no BUSY enum state.
 
-Offers transition OFFERED -> ACCEPTED / REJECTED / EXPIRED; repeating accept/reject is allowed at the entity level. The partial unique index enforces at most one ACCEPTED offer per trip, not one outstanding offer or one active trip per driver. Offers have no response deadline; expire has no automatic caller.
+Offers transition OFFERED -> ACCEPTED / REJECTED / EXPIRED; repeating accept/reject is allowed at the entity level. The partial unique index enforces at most one ACCEPTED offer per trip, not one outstanding offer or one active trip per driver. Offers have no response deadline; cancelling the final rider expires outstanding offers and releases the associated driver in the same transaction. There is no deadline-based expiration scheduler.
 
 Accounts have EMPLOYEE, ADMIN or APPROVER roles and an optional employee link; transport employees have no credentials. Escalations have OPEN/RESOLVED states; only inspection is exposed. See [API](api-design.md), [planning](batching-strategy.md) and [failure boundaries](failure-modes.md).
