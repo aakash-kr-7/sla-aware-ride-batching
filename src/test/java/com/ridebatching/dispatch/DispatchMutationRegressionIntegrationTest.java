@@ -25,6 +25,39 @@ class DispatchMutationRegressionIntegrationTest extends AbstractPostgresIntegrat
     @Autowired EmployeeRepository employees;
     @Autowired JdbcTemplate jdbc;
     @Autowired TransactionTemplate transaction;
+    @Autowired RejectionCoolOffPolicy coolOff;
+
+    @Test
+    void coolOffExpiresAtExactRejectionTimeBoundary() {
+        Driver driver = driver(4, 0);
+        Trip trip = trip(1);
+        DriverOffer offer = offer(driver, trip);
+        service.rejectOffer(offer.getId());
+        Instant now = Instant.parse("2026-10-11T12:00:00Z");
+        jdbc.update("UPDATE driver_offers SET updated_at=? WHERE id=?", java.sql.Timestamp.from(now.minusSeconds(300)), offer.getId());
+        assertThat(coolOff.isExcludedByCoolOff(driver.getId(), trip.getId(), now)).isFalse();
+        jdbc.update("UPDATE driver_offers SET updated_at=? WHERE id=?", java.sql.Timestamp.from(now.minusSeconds(299)), offer.getId());
+        assertThat(coolOff.isExcludedByCoolOff(driver.getId(), trip.getId(), now)).isTrue();
+    }
+
+    @Test
+    void capacityCountsConcurrentPassengersRatherThanTotalBookings() {
+        Driver driver = driver(1, 0);
+        Trip trip = trip(4);
+        transaction.executeWithoutResult(status -> {
+            Trip locked = trips.findByIdForUpdate(trip.getId()).orElseThrow();
+            List<TripStop> old = List.copyOf(locked.getStops());
+            List<TripStop> turnover = new ArrayList<>();
+            for (int i = 0; i < 4; i++) {
+                turnover.add(old.get(i));
+                turnover.add(old.get(i + 4));
+            }
+            locked.assignRoute(turnover);
+        });
+        DriverOffer offer = service.dispatchTrip(trip.getId(), new GeoPoint(0, 0)).orElseThrow();
+        service.acceptOffer(offer.getId());
+        assertThat(drivers.findById(driver.getId()).orElseThrow().getActiveTripId()).isEqualTo(trip.getId());
+    }
 
     @Test
     void sameDriverCannotAcceptDifferentTripsConcurrently() throws Exception {

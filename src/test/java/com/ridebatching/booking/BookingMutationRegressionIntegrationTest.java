@@ -88,6 +88,35 @@ class BookingMutationRegressionIntegrationTest extends AbstractPostgresIntegrati
     }
 
     @Test
+    void tripDispatchedWhileInsertionWaitsCannotReceiveLateRider() throws Exception {
+        Booking original = booking(employee(), 3600);
+        Trip trip = trip(original);
+        Booking late = booking(employee(), 3600);
+        DriverOffer offer = offers.saveAndFlush(new DriverOffer(UUID.randomUUID(), availableDriver().getId(), trip.getId()));
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            Future<Boolean> insertion = transaction.execute(status -> {
+                trips.findByIdForUpdate(trip.getId()).orElseThrow();
+                Future<Boolean> worker = executor.submit(() -> transaction.execute(inner -> {
+                    jdbc.execute("SET LOCAL application_name='insertion-dispatch-review'");
+                    return batching.attemptLateInsertion(late);
+                }));
+                await(() -> blocked("insertion-dispatch-review"));
+                dispatch.acceptOffer(offer.getId());
+                return worker;
+            });
+            assertThat(insertion.get(10, TimeUnit.SECONDS)).isFalse();
+            assertThat(bookings.findById(late.getId()).orElseThrow().getStatus()).isEqualTo(BookingStatus.PENDING);
+            assertThat(stopCount(late.getId())).isZero();
+            assertThat(trips.findById(trip.getId()).orElseThrow().getStatus()).isEqualTo(TripStatus.DISPATCHED);
+            assertThat(stopCount(original.getId())).isEqualTo(2);
+        } finally {
+            executor.shutdownNow();
+            assertThat(executor.awaitTermination(10, TimeUnit.SECONDS)).isTrue();
+        }
+    }
+
+    @Test
     void insertionFailureMustRollBackNewBooking() {
         Employee employee = employee();
         zones.save(new ServiceableZone("test", 0, 0, 1000, true));
