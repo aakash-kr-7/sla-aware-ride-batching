@@ -21,7 +21,9 @@ Start the application in that directory. Keep this terminal open:
 
 Wait for `Local fixtures loaded` (or `Local reference data already exists`). First startup downloads Maven dependencies and runs all Flyway migrations. No `.env`, private files or SQL editing is needed for this path.
 
-Open [Swagger UI](http://127.0.0.1:8080/swagger-ui/index.html). In a second terminal, from the repository root:
+Open the [browser walkthrough](http://127.0.0.1:8080/) to exercise the workflow one click at a time, or [Swagger UI](http://127.0.0.1:8080/swagger-ui/index.html) for the complete API. The [page guide](reviewer-ui.md) explains its eight stages and inspection controls. Choose the browser path or the Python path on a fresh database; both save real business state.
+
+For the automated Python path, in a second terminal, from the repository root:
 
 ```sh
 python scripts/local-review.py
@@ -125,6 +127,6 @@ Normal startup creates no employees, accounts, zones or drivers. There is no ref
 | Walkthrough finds existing bookings | Stop the app, reset only the local Compose volume, and restart. Startup intentionally preserves state. |
 | Batching considers zero | Normal runtime waits for closed windows or the five-minute urgency guard. The reviewer profile uses a 20-minute guard; it still respects window grouping and expiration. |
 | Offer expired / route infeasible | Do not reuse an old offer ID. Inspect the trip and use Advance where an untried feasible driver remains, or reset for a repeatable walkthrough. |
-| HTTP 400 in a browser | Open the full `/swagger-ui/index.html` path on `127.0.0.1`; `/` is not a UI. If Tomcat reports request parsing failure before the app runs, try a clean browser session or clear localhost cookies. |
+| HTTP 400 in a browser | Open `/` for the reviewer page or `/swagger-ui/index.html` for Swagger on `127.0.0.1`. If Tomcat reports request parsing failure before the app runs, try a clean browser session or clear localhost cookies. |
 
 Run `./mvnw clean verify` (Windows: `.\mvnw.cmd clean verify`) for the build and full tests. Tests use disposable Testcontainers PostgreSQL, not this Compose database, and require no fixture startup.

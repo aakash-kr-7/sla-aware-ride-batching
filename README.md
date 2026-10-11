@@ -22,7 +22,7 @@ Ad-hoc employee pickups can create unnecessary cab journeys. Nearby pickups and 
 | Inspection | Grouped booking IDs, ordered stops, occupancy, saved pickup estimates/deadlines and hypothetical rejection examples |
 | Operations | Health/readiness, Micrometer/Prometheus, correlation logging and persisted open SLA issues |
 
-Driver responses and execution are **authenticated admin simulations**. There is no driver app or notification delivery. Swagger is the interactive API client, not an employee-facing product UI.
+Driver responses and execution are **authenticated admin simulations**. There is no separate driver app or notification delivery. An interactive console at `/` provides a clean walkthrough of the backend flow, while Swagger UI provides the complete API reference.
 
 ## Architecture
 
@@ -59,7 +59,7 @@ PostgreSQL integration tests force competing operations into real lock waits and
 | PostgreSQL 16 / Flyway / JPA | Database constraints and row locks arbitrate races; migrations own schema and Hibernate validates it |
 | Testcontainers / JUnit 5 | Exercise the same database semantics rather than substituting an in-memory database |
 | Caffeine | Small, local active-zone cache; mutable assignments remain transactional |
-| Springdoc / Actuator / Micrometer | Inspect API contracts and operational signals without a custom dashboard |
+| Springdoc / Actuator / Micrometer | Inspect API contracts and operational signals; a dependency-free reviewer page makes the workflow easier to follow |
 
 CI builds on Java 21; Java 17 remains the compilation target. Maven Wrapper pins the build tooling.
 
@@ -82,7 +82,7 @@ Keep the application running in this terminal:
 
 Linux/macOS: `./mvnw spring-boot:run -Dspring-boot.run.profiles=local-fixtures`.
 
-Open [Swagger UI](http://127.0.0.1:8080/swagger-ui/index.html). The explicit fixture profile supplies disposable accounts, zones and drivers in its own local database. **Normal startup creates no business fixtures.** This profile changes only the local urgent lead time and offer lifetime to make a short walkthrough practical; hard route constraints remain enabled. [Credentials, policy differences, normal startup and reset](docs/local-development.md).
+Open the [backend walkthrough](http://127.0.0.1:8080/) or [Swagger UI](http://127.0.0.1:8080/swagger-ui/index.html). The explicit fixture profile supplies disposable accounts, zones and drivers in its own local database. **Normal startup creates no business fixtures.** This profile changes only the local urgent lead time and offer lifetime to make a short walkthrough practical; hard route constraints remain enabled. [Credentials, policy differences, normal startup and reset](docs/local-development.md).
 
 ## Run tests
 
@@ -94,7 +94,11 @@ Linux/macOS: `./mvnw clean verify`. Docker must be running; PostgreSQL Testconta
 
 ## Quick review
 
-In a second terminal at the repository root:
+For an interactive browser walkthrough, open `http://127.0.0.1:8080/`, click **Auto-fill Test Credentials**, and click **Connect & Sign In**. Follow the 8 sequential stages: each action executes live backend APIs, displaying real routes, capacity limits, pickup deadlines, and driver offers in real time. A top-right button links directly to Swagger UI at any time. [Console Guide](docs/reviewer-ui.md).
+
+The browser and Python paths both mutate the same database. Choose one on a fresh setup; reset database volume before repeating the scenario.
+
+For the automated path, in a second terminal at the repository root:
 
 ```sh
 python scripts/local-review.py
@@ -108,7 +112,7 @@ For a 6–10 minute explanation, use `--pause` on a fresh local database and fol
 
 | Read this | To understand |
 | --- | --- |
-| [Local setup](docs/local-development.md), [review guide](docs/reviewer-guide.md) | Start, inspect, record and reset the public workflow |
+| [Local setup](docs/local-development.md), [review guide](docs/reviewer-guide.md), [browser walkthrough](docs/reviewer-ui.md) | Start, inspect, record and reset the public workflow |
 | [Architecture](docs/architecture.md), [domain model](docs/domain-model.md) | Packages, relationships and reachable states |
 | [Batching strategy](docs/batching-strategy.md), [planner and ETA](docs/planner-and-eta.md) | Collection boundaries, clustering, feasible search and timing |
 | [API reference](docs/api-design.md), [trip inspection](docs/trip-inspection.md) | Authentication, operations, response fields and rejection examples |

@@ -1,6 +1,8 @@
 # Review the working system
 
-This is an employee ride-pooling backend. It accepts ride requests, builds feasible shared routes and coordinates driver offers. The useful demonstration is **why a route is allowed or refused, and whether competing mutations preserve its state**. Swagger lets you send real HTTP requests and inspect that state; a custom frontend is outside this submission.
+This project is an SLA-aware ride-pooling backend for employee transit. It groups on-demand ride requests into feasible shared routes within vehicle capacity and SLA constraints, and coordinates driver dispatch through an offer state machine. 
+
+To review the system, you can use the [Interactive Reviewer Console](reviewer-ui.md) at `http://127.0.0.1:8080/`, explore endpoints via [Swagger UI](http://127.0.0.1:8080/swagger-ui/index.html), or run the automated terminal script below. All three paths interact with the live Spring Boot backend.
 
 Use the [public local setup](local-development.md) from a fresh clone and empty disposable database. For an unattended check run `python scripts/local-review.py`. For a 6–10 minute explanation, run:
 
