@@ -73,12 +73,12 @@ sequenceDiagram
         Note over C,S: A later explicit dispatch call performs re-offering
     else Caller accepts
         C->>S: acceptOffer(offerId)
-        S->>DB: Update offer, lock trip, assign trip and driver
+        S->>DB: Lock trip, offer and driver; recheck and assign
         Note over S,DB: One transaction; failure rolls back all changes
     end
 ```
 
-Driver status remains `AVAILABLE` after assignment; `activeTripId` excludes it from further selection. Selection is advisory until acceptance. Offers have no deadline, expiry scheduler or delivery mechanism. Dispatch does not compare driver capacity with planned occupancy. Detailed state boundaries are in [domain model](domain-model.md).
+Driver status remains `AVAILABLE` after assignment; `activeTripId` excludes it from further selection. Selection is advisory until acceptance. Offers have no deadline, expiry scheduler or delivery mechanism. Selection and acceptance compare actual vehicle capacity with peak planned occupancy. Detailed state boundaries are in [domain model](domain-model.md).
 
 ## Why these choices
 

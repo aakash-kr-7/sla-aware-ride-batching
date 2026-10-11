@@ -113,7 +113,7 @@ class DispatchIntegrationTest extends AbstractPostgresIntegrationTest {
 
         // Manually move the rejection time back by 10 minutes
         DriverOffer offer = offerRepository.findById(firstOffer.get().getId()).orElseThrow();
-        jdbcTemplate.update("UPDATE driver_offers SET created_at = created_at - interval '10 minutes' WHERE id = ?", offer.getId());
+        jdbcTemplate.update("UPDATE driver_offers SET updated_at = updated_at - interval '10 minutes' WHERE id = ?", offer.getId());
 
         Optional<DriverOffer> secondOffer = dispatchService.dispatchTrip(tripId, pickupLocation);
         assertThat(secondOffer).isPresent();

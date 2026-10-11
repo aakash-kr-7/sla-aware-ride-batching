@@ -79,6 +79,16 @@ public class Trip {
         return Collections.unmodifiableList(stops);
     }
 
+    public int getPeakPassengers() {
+        int onboard = 0;
+        int peak = 0;
+        for (TripStop stop : stops) {
+            onboard += stop.getType() == TripStopType.PICKUP ? 1 : -1;
+            peak = Math.max(peak, onboard);
+        }
+        return peak;
+    }
+
     /**
      * Assigns a sequenced route to this trip.
      * Enforces the invariant that for every booking, the pickup stop 

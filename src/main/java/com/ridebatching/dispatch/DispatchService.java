@@ -7,6 +7,9 @@ import com.ridebatching.driver.DriverRepository;
 import com.ridebatching.geo.GeoPoint;
 import com.ridebatching.trip.Trip;
 import com.ridebatching.trip.TripRepository;
+import com.ridebatching.trip.TripStatus;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,6 +33,8 @@ public class DispatchService {
     private final RejectionCoolOffPolicy coolOffPolicy;
     private final TripRepository tripRepository;
     private final MeterRegistry meterRegistry;
+    @PersistenceContext
+    private EntityManager entityManager;
 
     public DispatchService(DriverRepository driverRepository,
                            DriverOfferRepository offerRepository,
@@ -49,12 +54,15 @@ public class DispatchService {
 
     @Transactional
     public Optional<DriverOffer> dispatchTrip(UUID tripId, GeoPoint firstPickupLocation) {
+        Trip trip = lockTrip(tripId);
+        requirePlanned(trip);
         List<Driver> allDrivers = driverRepository.findAll();
         
         Instant now = Instant.now();
 
         List<Driver> eligibleDrivers = allDrivers.stream()
                 .filter(d -> eligibilityPolicy.evaluate(d).isEligible())
+                .filter(d -> d.getVehicleCapacity() >= trip.getPeakPassengers())
                 .filter(d -> !coolOffPolicy.isExcludedByCoolOff(d.getId(), tripId, now))
                 .toList();
 
@@ -64,7 +72,13 @@ public class DispatchService {
             return Optional.empty();
         }
 
-        Driver selectedDriver = rankedDrivers.get(0);
+        Driver selectedDriver = driverRepository.findByIdForUpdate(rankedDrivers.get(0).getId()).orElseThrow();
+        entityManager.refresh(selectedDriver);
+        if (!eligibilityPolicy.evaluate(selectedDriver).isEligible()
+                || selectedDriver.getVehicleCapacity() < trip.getPeakPassengers()
+                || coolOffPolicy.isExcludedByCoolOff(selectedDriver.getId(), tripId, Instant.now())) {
+            return Optional.empty();
+        }
         
         DriverOffer offer = new DriverOffer(UUID.randomUUID(), selectedDriver.getId(), tripId);
         offerRepository.save(offer);
@@ -76,8 +90,9 @@ public class DispatchService {
     
     @Transactional
     public void rejectOffer(UUID offerId) {
-        DriverOffer offer = offerRepository.findById(offerId)
+        DriverOffer offer = offerRepository.findByIdForUpdate(offerId)
                 .orElseThrow(() -> new IllegalArgumentException("Offer not found"));
+        entityManager.refresh(offer);
         offer.reject();
         offerRepository.save(offer);
         
@@ -87,27 +102,44 @@ public class DispatchService {
 
     @Transactional
     public void acceptOffer(UUID offerId) {
-        DriverOffer offer = offerRepository.findById(offerId)
+        DriverOffer reference = offerRepository.findById(offerId)
                 .orElseThrow(() -> new IllegalArgumentException("Offer not found"));
-
-        // Accept the offer first (will throw if not OFFERED)
-        offer.accept();
-        offerRepository.save(offer);
-
-        // Lock the trip to prevent concurrent assignments
-        Trip trip = tripRepository.findByIdForUpdate(offer.getTripId())
-                .orElseThrow(() -> new IllegalArgumentException("Trip not found"));
-
-        // Transition trip state (will throw if already DISPATCHED or not PLANNED)
-        trip.assignTo(offer.getDriverId());
-        tripRepository.save(trip);
-
-        // Assign the driver
-        Driver driver = driverRepository.findById(offer.getDriverId())
+        // All assignment paths use trip -> offer -> driver order. Different trips still share the driver lock.
+        Trip trip = lockTrip(reference.getTripId());
+        DriverOffer offer = offerRepository.findByIdForUpdate(offerId).orElseThrow();
+        entityManager.refresh(offer);
+        Driver driver = driverRepository.findByIdForUpdate(offer.getDriverId())
                 .orElseThrow(() -> new IllegalArgumentException("Driver not found"));
+        entityManager.refresh(driver);
+        if (offer.getStatus() == DriverOfferStatus.ACCEPTED) {
+            if (trip.getStatus() == TripStatus.DISPATCHED && driver.getId().equals(trip.getDriverId())
+                    && trip.getId().equals(driver.getActiveTripId())) return;
+            throw new IllegalStateException("Accepted offer no longer has an active assignment");
+        }
+        requirePlanned(trip);
+        if (!eligibilityPolicy.evaluate(driver).isEligible()
+                || driver.getVehicleCapacity() < trip.getPeakPassengers()
+                || coolOffPolicy.isExcludedByCoolOff(driver.getId(), trip.getId(), Instant.now())) {
+            throw new IllegalStateException("Driver is no longer eligible for this trip");
+        }
+        offer.accept();
+        trip.assignTo(driver.getId());
         driver.assignTrip(trip.getId());
-        driverRepository.save(driver);
         
         log.info("Driver accepted offer");
+    }
+
+    private Trip lockTrip(UUID id) {
+        Trip locked = tripRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new IllegalArgumentException("Trip not found"));
+        // Reload the aggregate after the row lock; cascading refresh can encounter already-deleted stops.
+        entityManager.detach(locked);
+        return tripRepository.findById(id).orElseThrow();
+    }
+
+    private void requirePlanned(Trip trip) {
+        if (trip.getStatus() != TripStatus.PLANNED) {
+            throw new IllegalStateException("Only planned trips can receive new driver assignments");
+        }
     }
 }

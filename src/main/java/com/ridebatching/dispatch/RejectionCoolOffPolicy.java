@@ -25,7 +25,7 @@ public class RejectionCoolOffPolicy {
         Instant threshold = now.minus(coolOffDuration);
         
         List<DriverOffer> recentRejections = offerRepository
-                .findByDriverIdAndTripIdAndStatusAndCreatedAtAfter(
+                .findByDriverIdAndTripIdAndStatusAndUpdatedAtAfter(
                         driverId, tripId, DriverOfferStatus.REJECTED, threshold
                 );
                 

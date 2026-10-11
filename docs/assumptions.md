@@ -11,8 +11,8 @@ The case study supplies behavior and examples, not a complete operating policy. 
 | D06: direction | Leader bearing difference <= 45 degrees (`app.batching.max-bearing-angle-diff-degrees`). | Component implemented/tested; runtime orchestration absent. Bearing compatibility alone does not prove a small detour. |
 | D07: rider detour | Extra in-vehicle duration must meet both 100% relative and 30-minute absolute limits. | Policy chosen here, not specified by the source. Some tests/JMH use 40%/15 minutes. No claim that either policy is operationally acceptable. |
 | D08: travel duration | `floor(Haversine metres * 1.35 / (30 km/h in m/s)) + 120 seconds` per leg. | Assessment approximation: constant speed/circuity/dwell, no traffic or road network. Same-location legs still include dwell. |
-| D09: seats | One rider/booking; `app.fleet.default-vehicle-capacity=4`. Source illustrates a four-seater. | A temporary Vehicle value enforces planning capacity; no persisted vehicle allocation. Dispatch does not validate driver capacity against the route. |
-| D10: cool-off | `dispatch.cool-off.duration=PT5M`; excludes a driver for the same trip if a REJECTED offer was created strictly after now minus duration. | Measured from offer creation, not rejection; no trip revision reset. A slow response can shorten effective cool-off. |
+| D09: seats | One rider/booking; `app.fleet.default-vehicle-capacity=4`. Source illustrates a four-seater. | A temporary Vehicle value enforces planning capacity; no persisted vehicle allocation. Dispatch checks actual driver capacity against peak route occupancy, including at acceptance. |
+| D10: cool-off | `dispatch.cool-off.duration=PT5M`; excludes a driver for the same trip if a REJECTED offer was updated strictly after now minus duration. | Measured from rejection; equality at the expiry threshold is eligible. No trip revision reset. |
 | D11: cancellation | State-idempotent; reject DROPPED, allow PICKED_UP; remove/resequence only affected trip's stops, cancel empty trip. | No feasibility recheck, driver release or offer revoke. This is partial execution-time handling. |
 | Trigger policy | Scheduler off by default; enabled fixed delay is 5000ms. | Scheduling frequency is independent of slots; no automatic dispatch or escalation. |
 
@@ -22,4 +22,4 @@ The limits above describe computed acceptance, not real-world pickup or road-ETA
 
 DB password and JWT signing secret are required environment values. Compose reads `.env`; Spring Boot needs exported values. The local profile only creates an admin when explicitly enabled with supplied credentials and the account table is empty; tests use separate signing material and disposable DBs. See [demo](demo.md) for setup and [traceability](requirements-traceability.md) for requirement coverage.
 
-Road-network/traffic ETA, dispatch-to-vehicle capacity reconciliation, bounded claim sizes, response-time cool-off and complete execution/cancellation handling are future improvements. They are not properties of the current submission.
+Road-network/traffic ETA, bounded claim sizes and complete execution/cancellation handling are future improvements. They are not properties of the current submission.
