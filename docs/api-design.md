@@ -2,7 +2,7 @@
 
 Swagger UI: `/swagger-ui/index.html`. Generated schema: `/v3/api-docs`.
 
-The opening description explains the sequence: login, Authorize with the returned token, list/create a booking, switch to an admin token for batching, then retrieve the booking to inspect status/trip association. Endpoint summaries and parameter descriptions identify required IDs and which calls change data. Example coordinates are illustrative and require configured business records; startup seeds none.
+The opening description explains the sequence: login, Authorize with the returned token, list/create a booking, switch to an admin token for batching, then retrieve the booking to inspect status/trip association. Admin dispatch simulation lists routes and offer history, rejects the stored driver's offer to see the next driver, and accepts to commit assignment. Endpoint summaries and parameter descriptions identify required IDs and which calls change data. Example coordinates are illustrative and require configured business records; startup seeds none.
 
 ## Authentication and access
 
@@ -47,12 +47,30 @@ The page contains `content`, `totalElements`, `totalPages`, `size`, `number` (ze
 
 Batching accepts no window/force parameter. It claims at most the configured limit (default 100) of closed-window or urgent unexpired pending bookings, then groups by source window, zone and direction. Open-window bookings with more than the configured urgent budget remain collecting, including on manual triggers. Expired bookings remain pending but are excluded from claims. Counts describe this cycle's claims, not the total queue; zero considered can coexist with saved pending bookings. See [exact rules and settings](batching-strategy.md#collection-and-eligibility-rules). Escalations must currently be supplied separately; batching does not create them.
 
+Each newly formed trip attempts its initial offer in the batching transaction. An unavailable driver does not undo a feasible route; dispatch inspection shows the outcome.
+
 Actuator exposes health, info, metrics and Prometheus without authentication. See [operational endpoints](failure-modes.md#health-metrics-and-logs).
+
+## Admin dispatch simulation
+
+All five operations require ADMIN. No employee header, driver ID or request body is accepted; responses refer to the driver bound to the stored offer.
+
+| Method | Route | Result |
+| --- | --- | --- |
+| GET | `/api/admin/dispatch/trips?page=0&size=20` | Newest trip views; size 1–100 |
+| GET | `/api/admin/dispatch/trips/{tripId}` | Route, peak passengers, outcome, activeOfferId and offer history |
+| POST | `/api/admin/dispatch/trips/{tripId}/advance` | Reuse live offer or expire/attempt next; no attempt reset |
+| POST | `/api/admin/dispatch/offers/{offerId}/reject` | Reject and automatically consider next driver |
+| POST | `/api/admin/dispatch/offers/{offerId}/accept` | Commit assignment after locked rechecks; return trip view |
+
+`DispatchView` contains `tripId`, `tripStatus`, `assignedDriverId`, `peakPassengers`, `outcome`, `activeOfferId`, `attemptsUsed`, `attemptLimit`, `offers` and `stops`. Offer items include ID, stored driver ID, status and created/expiry/updated timestamps; stops include sequence, booking ID, type and location. These views avoid serializing managed entities. Peak passengers is occupancy, not vehicle capacity. Outcomes, expiry semantics and reproduction commands are [documented here](dispatch-workflow.md).
 
 ## Error contracts and limits
 
 The global handler maps missing booking to 404 (`BOOKING_NOT_FOUND`), unserviceable pickup to 422 (`UNSERVICEABLE_ZONE`) and DTO validation to 400 (`VALIDATION_ERROR`). Responses contain `code`, `message`, `timestamp`, `path`. Invalid/expired JWTs return 401 using that shape. Missing authentication returns 403 through Spring Security. Role/ownership denials return 403; controller advice emits `FORBIDDEN` with a generic message.
 
+Missing trip/offer returns 404 `DISPATCH_NOT_FOUND`. Acceptance/rejection at offer expiry returns 409 `OFFER_EXPIRED`; the expiry transition and next offer intentionally commit despite that response. Cancelled-trip or unavailable-driver acceptance returns 409 `STATE_CONFLICT`.
+
 Login failure is plain text. Invalid arguments return 400 (`INVALID_REQUEST`); explicit domain transitions and optimistic/pessimistic lock conflicts return 409 (`STATE_CONFLICT`). Conflict responses do not echo database details. Unexpected internal failures remain server errors. The JWT filter handles only token/account authentication errors; it does not relabel downstream failures. See [failure modes](failure-modes.md).
 
-Trip progress/retrieval, driver offers, zone/fleet CRUD and escalation resolution have no HTTP routes.
+Trip execution, zone/fleet CRUD and escalation resolution have no HTTP routes. Admin-only dispatch inspection and simulated offer responses are available; see [dispatch workflow](dispatch-workflow.md).

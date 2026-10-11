@@ -17,11 +17,14 @@ flowchart LR
     Booking --> DB[(PostgreSQL)]
     Batch --> DB
     Zones --> DB
-    Caller[Explicit service caller or test] --> Dispatch[DispatchService]
+    Batch --> Dispatch[DispatchService]
+    Security --> Simulation[Admin dispatch simulation]
+    Simulation --> Dispatch
+    Expiry[Bounded expiry job] --> Dispatch
     Dispatch --> DB
 ```
 
-There is deliberately no arrow from batching to dispatch: that integration is absent. Dispatch has service tests but no driver HTTP endpoint or notification transport. Escalations have a read API, with no automatic producer or resolution workflow.
+Batching attempts an initial driver offer for each new trip in the same transaction. Authenticated admin simulation endpoints expose inspection, rejection, acceptance and bounded advancement. A scheduled job advances due offers; no driver notification transport is supplied. Escalations have a read API, with no automatic producer or resolution workflow.
 
 ## Code boundaries
 
@@ -62,26 +65,29 @@ The HTTP route returns 201 for both a new booking and a duplicate. There is no c
 
 ```mermaid
 sequenceDiagram
-    participant C as Explicit service caller
+    participant B as Batching / admin simulation / expiry job
     participant S as DispatchService
     participant DB as PostgreSQL
-    C->>S: dispatchTrip(tripId, firstPickup)
-    S->>DB: Load drivers and recent trip-specific rejections
-    S->>S: Filter eligibility, rank by Haversine distance
-    S->>DB: Persist OFFERED for nearest eligible driver
-    S-->>C: Offer, or empty if no eligible driver
-    alt Caller rejects
-        C->>S: rejectOffer(offerId)
-        S->>DB: Set REJECTED
-        Note over C,S: A later explicit dispatch call performs re-offering
-    else Caller accepts
-        C->>S: acceptOffer(offerId)
-        S->>DB: Lock trip, offer and driver; recheck and assign
-        Note over S,DB: One transaction; failure rolls back all changes
+    B->>S: advanceTrip(tripId)
+    S->>DB: Lock trip; inspect offer history
+    S->>S: Exclude attempted/ineligible drivers; rank nearest
+    S->>DB: Persist initial OFFERED (or no offer)
+    S-->>B: Route, activeOfferId, history and outcome
+    alt Admin simulates rejection
+        B->>S: rejectOffer(activeOfferId)
+        S->>DB: Lock trip and offer; set REJECTED
+        S->>DB: Persist next untried driver's offer
+    else Offer deadline reached
+        B->>S: advanceTrip(tripId)
+        S->>DB: Set EXPIRED; try next driver within attempt limit
+    else Admin simulates acceptance
+        B->>S: acceptOffer(activeOfferId)
+        S->>DB: Lock trip, offer and driver; recheck expiry/capacity/eligibility
+        S->>DB: Commit accepted offer and matching trip/driver assignment
     end
 ```
 
-Driver status remains `AVAILABLE` after assignment; `activeTripId` excludes it from further selection. Selection is advisory until acceptance. Offers have no deadline, expiry scheduler or delivery mechanism. Selection and acceptance compare actual vehicle capacity with peak planned occupancy. Detailed state boundaries are in [domain model](domain-model.md).
+Driver status remains `AVAILABLE` after assignment; `activeTripId` excludes it from selection. Offers are provisional and do not reserve a driver. The stored first pickup supplies proximity ranking; HTTP accepts no driver identity or pickup coordinates. Default lifetime is two minutes, with at most three distinct driver attempts per trip. A rejected driver enters the existing same-trip five-minute cool-off; the workflow's no-repeat rule also excludes every attempted driver for that trip permanently. See [offer outcomes and recovery](dispatch-workflow.md).
 
 ## Why these choices
 
@@ -91,4 +97,4 @@ Driver status remains `AVAILABLE` after assignment; `activeTripId` excludes it f
 - **Caffeine for zones only:** zone reads are frequent and the data changes less often than trip state. Freshness is TTL-bounded; mutable booking/assignment guarantees stay in PostgreSQL. See [cache decision](decisions/007-zone-caching.md).
 - **Explicit transaction boundaries:** duplicates need a usable transaction after a losing insert; see [dedup decision](decisions/0005-handle-booking-deduplication.md). Batching, cancellation and acceptance each coordinate their own changes.
 
-Java 17 is the build target; CI runs Java 21. No distributed infrastructure is needed for this submission. Production routing, end-to-end dispatch and wider race coverage would be further work, not properties of the current architecture.
+Java 17 is the build target; CI runs Java 21. No distributed infrastructure is needed for this submission. Production routing, driver identity/notification delivery and wider race coverage would be further work, not properties of the current architecture.

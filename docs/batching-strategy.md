@@ -47,7 +47,7 @@ flowchart TD
 
 The greedy planner prefers sharing if any candidate fits. It chooses by added estimated route duration; equal costs choose the lower trip UUID. New trip UUIDs are random, so tie-breaking is stable for supplied identities, not a promise of identical grouping across fresh runs. There is no occupancy objective function or global trip-count optimum.
 
-Scheduling is disabled by default. The admin trigger runs one cycle; an enabled scheduler uses fixed delay, independently of booking-slot duration. Neither path dispatches offers or creates escalations.
+Scheduling is disabled by default. The admin trigger runs one cycle; an enabled scheduler uses fixed delay, independently of booking-slot duration. Both paths attempt an initial driver offer for each newly planned trip in the same transaction. Neither creates escalations. Dispatch rejection/expiry and bounded retries are described in the [offer workflow](dispatch-workflow.md).
 
 ## Insertion search and acceptance
 
