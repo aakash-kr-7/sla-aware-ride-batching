@@ -9,6 +9,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 class LocalTravelTimeEstimatorTest {
 
     @Test
+    void invalidConfigurationCannotProduceNegativeOrNonFiniteTravelTimes() {
+        for (double value : new double[]{0, -1, Double.NaN, Double.POSITIVE_INFINITY}) {
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> new LocalTravelTimeEstimator(value, 30, 120))
+                    .isInstanceOf(IllegalArgumentException.class);
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> new LocalTravelTimeEstimator(1.35, value, 120))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> new LocalTravelTimeEstimator(1.35, 30, -1))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void shouldEstimateTravelTimeWithDwellTime() {
         // 1.35 circuity, 30km/h (8.33 m/s), 120s dwell
         LocalTravelTimeEstimator estimator = new LocalTravelTimeEstimator(1.35, 30.0, 120);

@@ -16,6 +16,11 @@ public class LocalTravelTimeEstimator implements TravelTimeEstimator {
             @Value("${app.geo.circuity-factor:1.35}") double circuityFactor,
             @Value("${app.geo.average-speed-kmh:30.0}") double averageSpeedKmh,
             @Value("${app.geo.stop-dwell-time-seconds:120}") long stopDwellTimeSeconds) {
+        if (!Double.isFinite(circuityFactor) || circuityFactor <= 0
+                || !Double.isFinite(averageSpeedKmh) || averageSpeedKmh <= 0
+                || stopDwellTimeSeconds < 0) {
+            throw new IllegalArgumentException("Travel-time factors must be finite and positive; dwell time must be non-negative");
+        }
         this.circuityFactor = circuityFactor;
         this.averageSpeedKmh = averageSpeedKmh;
         this.stopDwellTime = Duration.ofSeconds(stopDwellTimeSeconds);

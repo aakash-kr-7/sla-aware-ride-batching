@@ -18,8 +18,8 @@ import java.util.List;
 public record BatchingWindow(Instant start, Instant end) {
 
     public static BatchingWindow forTime(Instant time, Duration duration) {
-        if (duration == null || duration.isNegative() || duration.isZero()) {
-            throw new IllegalArgumentException("Batching duration must be positive");
+        if (duration == null || duration.isNegative() || duration.getSeconds() < 1 || duration.getNano() != 0) {
+            throw new IllegalArgumentException("Batching duration must be a positive whole number of seconds");
         }
 
         long durationSeconds = duration.getSeconds();

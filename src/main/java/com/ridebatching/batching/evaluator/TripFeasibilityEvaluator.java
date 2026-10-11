@@ -88,12 +88,14 @@ public class TripFeasibilityEvaluator {
         int peakPassengers = 0;
         int currentPassengers = 0;
         Set<UUID> onboard = new HashSet<>();
+        Set<UUID> pickedUp = new HashSet<>();
         
         for (TripStop stop : candidateRoute) {
             if (stop.getType() == TripStopType.PICKUP) {
-                if (!onboard.add(stop.getBookingId())) {
+                if (!pickedUp.add(stop.getBookingId())) {
                     return logAndReturn(traceId, candidateRoute, candidateBookingId, evaluated, FeasibilityResult.infeasible("Duplicate pickup", new StructuralRejectionDetails("STRUCTURAL_DUPLICATE_PICKUP", stop.getBookingId())));
                 }
+                onboard.add(stop.getBookingId());
                 currentPassengers++;
             } else if (stop.getType() == TripStopType.DROPOFF) {
                 if (!onboard.remove(stop.getBookingId())) {

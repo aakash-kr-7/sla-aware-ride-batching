@@ -95,6 +95,7 @@ public class Trip {
      * must occur before its drop-off stop.
      */
     public void assignRoute(List<TripStop> route) {
+        route = new ArrayList<>(route);
         validatePickupBeforeDropoff(route);
         
         this.stops.clear();

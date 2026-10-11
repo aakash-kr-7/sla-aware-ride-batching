@@ -20,6 +20,13 @@ class BatchingWindowTest {
     private final Duration DURATION = Duration.ofMinutes(15);
 
     @Test
+    void shouldRejectDurationsThatCannotBeAlignedToWholeEpochSeconds() {
+        for (Duration duration : List.of(Duration.ZERO, Duration.ofSeconds(-1), Duration.ofMillis(500), Duration.ofMillis(1500))) {
+            assertThrows(IllegalArgumentException.class, () -> BatchingWindow.forTime(Instant.EPOCH, duration));
+        }
+    }
+
+    @Test
     void shouldAlignToStartBoundary() {
         // Test exact start boundary (e.g. 10:15:00Z)
         Instant exactStart = ZonedDateTime.of(2026, 10, 10, 10, 15, 0, 0, ZoneOffset.UTC).toInstant();

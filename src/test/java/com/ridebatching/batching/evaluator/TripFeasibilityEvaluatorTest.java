@@ -78,6 +78,17 @@ class TripFeasibilityEvaluatorTest {
     }
 
     @Test
+    void shouldRejectRepeatedPickupDropPairEvenAfterPassengerHasLeft() {
+        UUID booking = UUID.randomUUID();
+        List<TripStop> route = List.of(mockStop(booking, TripStopType.PICKUP), mockStop(booking, TripStopType.DROPOFF),
+                mockStop(booking, TripStopType.PICKUP), mockStop(booking, TripStopType.DROPOFF));
+        EvaluationTrace trace = evaluator.evaluate(route, Map.of(), mockVehicle(), Instant.EPOCH, booking);
+        assertThat(trace.isFeasible()).isFalse();
+        assertThat(trace.isRejectedBy("STRUCTURAL_DUPLICATE_PICKUP")).isTrue();
+        assertThat(trace.constraintsEvaluated()).containsExactly("STRUCTURAL");
+    }
+
+    @Test
     void shouldRejectWhenStructuralCheckFails_DropoffBeforePickup() {
         UUID b1 = UUID.randomUUID();
         List<TripStop> route = List.of(

@@ -8,6 +8,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class GeoPointTest {
 
     @Test
+    void shouldRejectNonFiniteCoordinates() {
+        for (double value : new double[]{Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY}) {
+            assertThrows(InvalidCoordinateException.class, () -> new GeoPoint(value, 0));
+            assertThrows(InvalidCoordinateException.class, () -> new GeoPoint(0, value));
+        }
+    }
+
+    @Test
     void shouldAcceptValidCoordinates() {
         assertDoesNotThrow(() -> new GeoPoint(45.0, 90.0));
         assertDoesNotThrow(() -> new GeoPoint(-90.0, -180.0));

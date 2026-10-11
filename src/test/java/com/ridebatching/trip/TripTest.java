@@ -15,6 +15,17 @@ class TripTest {
     private final GeoPoint point = new GeoPoint(0, 0);
 
     @Test
+    void assigningCurrentRouteMustNotSilentlyClearItsBackingCollection() {
+        Trip trip = new Trip(UUID.randomUUID(), Instant.now(), Instant.now());
+        UUID bookingId = UUID.randomUUID();
+        trip.assignRoute(List.of(new TripStop(UUID.randomUUID(), bookingId, TripStopType.PICKUP, point),
+                new TripStop(UUID.randomUUID(), bookingId, TripStopType.DROPOFF, point)));
+        trip.assignRoute(trip.getStops());
+        assertThat(trip.getStops()).hasSize(2);
+        assertThat(trip.getStops()).extracting(TripStop::getSequenceOrder).containsExactly(1, 2);
+    }
+
+    @Test
     void shouldAcceptValidRouteWithOneBooking() {
         Trip trip = new Trip(UUID.randomUUID(), Instant.now(), Instant.now());
         UUID bookingId = UUID.randomUUID();
