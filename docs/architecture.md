@@ -12,7 +12,8 @@ flowchart LR
     Booking --> Batch
     Booking --> Zones[ServiceabilityService]
     Zones --> Cache[Caffeine active-zone list]
-    Batch --> Planner[BatchPlanner / route insertion / feasibility]
+    Batch --> Groups[Bounded claim / source window / zone-direction groups]
+    Groups --> Planner[BatchPlanner / route insertion / feasibility]
     Booking --> DB[(PostgreSQL)]
     Batch --> DB
     Zones --> DB
@@ -48,7 +49,9 @@ flowchart TD
     Late -->|Feasible planned trip| Confirm[Persist route and CONFIRMED association]
     Late -->|No fit| Pending[Return PENDING booking]
     Pending --> Trigger[Explicit admin trigger or enabled scheduler]
-    Trigger --> Plan[Transactional batch formation]
+    Trigger --> Claim[Bounded eligible claims with SKIP LOCKED]
+    Claim --> Groups[Source windows then active zone/direction clusters]
+    Groups --> Plan[Transactional trip planning]
     Plan -->|Feasible| Confirm
     Plan -->|Even solo infeasible| Remain[Remain PENDING]
 ```

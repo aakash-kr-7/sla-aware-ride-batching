@@ -1,10 +1,10 @@
 # Algorithm Complexity Analysis
 
-This document analyses in-memory planning and related functions. Runtime batching currently passes all pending bookings to the planner; the window and cluster algorithms are independently implemented, not wired into that cycle.
+This document analyses in-memory planning and related functions. Runtime batch formation claims at most the configured limit (default 100), partitions by source window, then clusters by active pickup zone and direction before planning. The separate late-insertion path remains unbounded.
 
 ## Variables
 
-- **$N$**: Number of pending bookings considered in one cycle or supplied cluster.
+- **$N$**: Number of claimed bookings in one cycle (bounded by the configured limit), or bookings supplied to a standalone planner.
 - **$Z$**: Number of active serviceable zones.
 - **$C$**: Number of clusters formed ($C \le N$).
 - **$T$**: Number of active candidate trips ($T \le N$).
@@ -14,7 +14,7 @@ This document analyses in-memory planning and related functions. Runtime batchin
 ## 1. Pending Candidate Retrieval (`BatchingService.formBatches`)
 
 - **Application row transfer/materialization**: $O(N)$ for N returned rows.
-  The query is `status = 'PENDING' FOR UPDATE SKIP LOCKED`, with a partial status index available. Actual DB cost depends on query plan, table size and locked rows; no constant or strictly linear DB-time guarantee is claimed.
+  The query filters unassociated PENDING rows by creation/deadline and closed-window/urgent eligibility, orders by deadline/creation/ID, applies LIMIT, then `FOR UPDATE SKIP LOCKED`. V12 supplies a matching partial ordered index. Actual DB cost depends on query plan, table size, open-window filtering and locked rows; LIMIT bounds returned rows, not scan time. Window partitioning adds O(N) application time/space.
 - **Space Complexity**: $O(N)$
   Allocates memory for $N$ booking entities.
 
@@ -31,7 +31,7 @@ This document analyses in-memory planning and related functions. Runtime batchin
 
 - **Time Complexity**: $O(S^3)$
   Evaluates all valid insertion pairs (pickup index, drop-off index) where pickup precedes drop-off. There are $O(S^2)$ such pairs. Constructing the route and calculating the travel time for each pair takes $O(S)$, resulting in $O(S^3)$.
-  Route length is not explicitly capped, so $S$ cannot generally be treated as constant. The planner checks only this minimum-cost insertion for feasibility, rather than evaluating every alternative feasible route.
+  Route length is bounded by twice the claimed cluster size for newly formed trips, but can grow through the separate late-add path, so $S$ cannot generally be treated as constant. The planner checks only this minimum-cost insertion for feasibility, rather than evaluating every alternative feasible route.
 - **Space Complexity**: $O(S)$
   Allocates a temporary list of stops for candidate routes.
 
@@ -66,4 +66,4 @@ Late insertion loads all PLANNED candidates and their booking data. For T trips 
 
 Route insertion dominates per-candidate search. A conservative global bound is $O(N^2 \cdot S^3)$, not a measured runtime model.
 
-For a fixed small route length, comparing bookings against candidate trips contributes quadratic work. With passenger turnover, route length can grow independently of seat capacity and the cubic insertion cost also matters. Neither the pending-row claim nor route length has an explicit runtime bound. Benchmark results cover only the recorded synthetic inputs, not a general demand or latency guarantee.
+For a fixed small route length, comparing bookings against candidate trips contributes quadratic work. For new batch formation N is limited and S <= 2N; work is summed over separate clusters rather than one global claim. With late-add passenger turnover, route length can grow independently of seat capacity and the cubic insertion cost also matters. The separate late-insertion scans are not capped. Benchmark results cover only the recorded synthetic inputs, not a general demand or latency guarantee.

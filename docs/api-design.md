@@ -45,7 +45,7 @@ The page contains `content`, `totalElements`, `totalPages`, `size`, `number` (ze
 | POST | `/api/admin/batching/trigger` | ADMIN | No body; returns `bookingsConsidered`, `tripsFormed`, `bookingsLeftPending` |
 | GET | `/api/v1/escalations/open` | ADMIN or APPROVER | Open entities: `id`, `referenceId`, `referenceType`, `reason`, `status`, `createdAt`, `updatedAt` |
 
-Batching accepts no window parameter and considers all pending bookings. Escalations must currently be supplied separately; batching does not create them.
+Batching accepts no window/force parameter. It claims at most the configured limit (default 100) of closed-window or urgent unexpired pending bookings, then groups by source window, zone and direction. Open-window bookings with more than the configured urgent budget remain collecting, including on manual triggers. Expired bookings remain pending but are excluded from claims. Counts describe this cycle's claims, not the total queue; zero considered can coexist with saved pending bookings. See [exact rules and settings](batching-strategy.md#collection-and-eligibility-rules). Escalations must currently be supplied separately; batching does not create them.
 
 Actuator exposes health, info, metrics and Prometheus without authentication. See [operational endpoints](failure-modes.md#health-metrics-and-logs).
 

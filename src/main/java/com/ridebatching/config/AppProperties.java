@@ -3,7 +3,7 @@ package com.ridebatching.config;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * Window, clustering and pickup SLA settings consumed by the booking domain.
+ * Shared window, direction and pickup SLA settings consumed by booking and batching.
  */
 @ConfigurationProperties(prefix = "app")
 public record AppProperties(

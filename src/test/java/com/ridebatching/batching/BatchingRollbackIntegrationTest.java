@@ -51,8 +51,10 @@ class BatchingRollbackIntegrationTest extends AbstractPostgresIntegrationTest {
         Employee emp = employeeRepository.findById(employeeId).orElseThrow();
         Instant createdAt = Instant.now().minusSeconds(1200); // A closed collection window.
         Instant slot = BatchingWindow.forTime(createdAt, java.time.Duration.ofMinutes(15)).start();
+        Instant earlier = createdAt.minusSeconds(900); // Roll back both source-window groups.
+        Instant earlierSlot = BatchingWindow.forTime(earlier, java.time.Duration.ofMinutes(15)).start();
         Booking booking1 = new Booking(UUID.randomUUID(), emp, new GeoPoint(0,0), new GeoPoint(1,1), slot, BookingStatus.PENDING, Instant.now().plusSeconds(3600), createdAt, "dedup_r1");
-        Booking booking2 = new Booking(UUID.randomUUID(), emp, new GeoPoint(0,0), new GeoPoint(1,1), slot, BookingStatus.PENDING, Instant.now().plusSeconds(3600), createdAt, "dedup_r2");
+        Booking booking2 = new Booking(UUID.randomUUID(), emp, new GeoPoint(0,0), new GeoPoint(1,1), earlierSlot, BookingStatus.PENDING, Instant.now().plusSeconds(3600), earlier, "dedup_r2");
         bookingRepository.saveAll(List.of(booking1, booking2));
 
         // Inject controlled failure during saveAll for trips
@@ -80,7 +82,7 @@ class BatchingRollbackIntegrationTest extends AbstractPostgresIntegrationTest {
         // 5. Assert later valid batching attempt proceeds correctly
         BatchingService.BatchingResult result = batchingService.formBatches();
         
-        assertThat(result.tripsFormed()).isGreaterThan(0);
+        assertThat(result.tripsFormed()).isEqualTo(2);
         
         List<Trip> successfulTrips = tripRepository.findAll();
         assertThat(successfulTrips).isNotEmpty();

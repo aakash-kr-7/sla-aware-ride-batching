@@ -26,7 +26,7 @@ public class BatchingAdminController {
      * Used for testing or explicit operational intervention.
      */
     @PostMapping("/trigger")
-    @Operation(summary = "Plan trips for pending bookings", description = "Admin only; no request body. Processes claimed pending requests, checking capacity, pickup deadlines and detours. Returns bookingsConsidered, tripsFormed and bookingsLeftPending. Zero considered means no pending rows were claimed. Retrieve a booking afterward to inspect its status/tripId. This operation does not dispatch drivers or use runtime window/direction clustering.")
+    @Operation(summary = "Plan trips for eligible pending bookings", description = "Admin only; no request body. Claims a bounded set from closed UTC windows or urgent requests (default 100 claims, five-minute urgency guard), then groups by source window, active pickup zone and direction before checking capacity, pickup deadlines and detours. Manual calls do not force an open window closed. Returns bookingsConsidered, tripsFormed and bookingsLeftPending for claimed rows only; zero considered can coexist with collecting or expired bookings. Expired requests remain pending and are excluded. Retrieve a booking afterward to inspect status/tripId. This operation does not dispatch drivers.")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<BatchingService.BatchingResult> triggerBatching() {
         BatchingService.BatchingResult result = batchingService.formBatches();

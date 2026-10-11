@@ -17,7 +17,7 @@ Ad-hoc employee pickups can produce unnecessary cab journeys. Nearby pickups and
 | Area | Implemented scope |
 | --- | --- |
 | Bookings | Authenticated creation, pickup-zone validation, logical deduplication, retrieval, pagination and cancellation |
-| Planning | Manual batching; opt-in scheduled cycles; greedy insertion with structure, capacity, pickup SLA and detour checks |
+| Planning | Bounded closed-window/urgent claims; zone/direction grouping; manual or opt-in scheduled cycles; capacity, pickup SLA and detour checks |
 | Trip mutation | Late insertion into planned trips; cancellation removes and resequences only the affected route |
 | Dispatch | Java services for eligible-driver ranking, offers, rejection cool-off and atomic acceptance; no driver HTTP API |
 | Operations | PostgreSQL persistence, Flyway migrations, JWT ownership/role checks, zone caching, health, metrics and Prometheus |
@@ -34,7 +34,8 @@ flowchart LR
     Trigger[Admin trigger / opt-in scheduler] --> Batch[Batching service]
     Booking -->|late insertion| Batch
     Booking --> Zones[Zone service + local cache]
-    Batch --> Planner[Insertion search + feasibility rules]
+    Batch --> Groups[Source window + zone/direction groups]
+    Groups --> Planner[Insertion search + feasibility rules]
     Booking --> DB[(PostgreSQL)]
     Batch --> DB
     Zones --> DB
@@ -46,8 +47,8 @@ Batching does not automatically call dispatch. Key code: [BatchPlanner](src/main
 
 ## Batching algorithm
 
-1. Claim pending bookings with PostgreSQL `FOR UPDATE SKIP LOCKED`.
-2. Sort by pickup deadline, then booking ID.
+1. Claim at most 100 eligible bookings with PostgreSQL `FOR UPDATE SKIP LOCKED`, ordered by deadline, creation time and ID. Fixed UTC windows normally close after 15 minutes; requests within five minutes of their deadline can leave collection early. Expired requests remain pending but are excluded from claims.
+2. Partition by source window, active pickup zone and compatible leader direction, then sort each cluster by pickup deadline and booking ID.
 3. Enumerate pickup/dropoff insertion positions while preserving each existing trip's stop order.
 4. Evaluate the cheapest insertion per trip: route structure, peak occupancy, every pickup deadline and every rider's detour.
 5. Choose the feasible trip with the smallest added estimated duration; otherwise check a solo route or leave the request pending.
@@ -110,7 +111,7 @@ Source lives in `src/main`, tests in `src/test`, and optional JMH source in `src
 
 ## Known limitations
 
-- Runtime batching claims all pending rows. Window and zone/direction clustering components exist but are not integrated; claim and candidate scans are unbounded.
+- Claim limits and competing workers can fragment clusters into extra trips. The urgency guard does not guarantee service under overload or downtime; expired requests need explicit recovery. Late-insertion candidate scans remain unbounded.
 - ETA uses straight-line distance, fixed speed/circuity and dwell; driver approach and live road/traffic data are absent. Computed SLA acceptance does not guarantee actual pickup time.
 - No automatic dispatch/re-offer/escalation, driver notification transport, trip execution API or escalation resolution workflow. Late insertion supports planned trips only.
 - Cancellation removes/resequences stops without a new optimization or execution-time feasibility check. Zone caching has no cross-instance/direct-SQL invalidation.
@@ -118,4 +119,4 @@ Source lives in `src/main`, tests in `src/test`, and optional JMH source in `src
 
 ## Future production evolution
 
-Complete bounded window/clustering and execution/dispatch workflows, calibrate road ETA/cancellation semantics, then measure load and validate operational access, cache freshness and recovery. These remain future work.
+Complete execution/dispatch and pending-request recovery workflows, calibrate road ETA/cancellation semantics, then measure load and validate operational access, cache freshness and recovery. These remain future work.

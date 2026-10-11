@@ -30,12 +30,12 @@ public class OpenApiConfig {
                                 **Buttons:** endpoint rows expand instructions; **Try it out** enables editing; **Execute** sends the request; **Server response** shows the actual result. **Example Value** only describes the input shape.
 
                                 ### How batching works
-                                Pending requests are processed by pickup deadline. The planner tries adding each pickup/dropoff to a route and checks stop order, simultaneous seat occupancy, every rider's pickup deadline and detour. A feasible shared route is accepted; otherwise it tries a separate trip. A request infeasible even alone stays pending.
+                                Each cycle claims a bounded set (default 100) from closed UTC collection windows, plus urgent requests within the configured deadline guard (default five minutes). New-trip groups stay within one source window, active pickup zone and compatible direction. Within each cluster, the planner processes pickup deadlines, tries route insertion and checks stop order, simultaneous seat occupancy, every rider's deadline and detour. A feasible shared route is accepted; otherwise it tries a separate trip.
 
                                 ### Current boundaries
                                 Startup does not create employee, zone or driver records. Replace examples with configured data. Repeated logical bookings return the existing booking; creating a booking may immediately insert it into an existing planned trip.
 
-                                A batching response contains counts, not full routes. Zero bookings considered means no pending rows were claimed. Runtime window/direction clustering is not connected. Driver offers are Java services without HTTP operations; batching does not automatically dispatch. Escalation reading does not create escalations.
+                                A batching response contains cycle counts, not full routes or total queue counts. Zero considered can mean saved requests are still collecting, expired or locked by another worker. Expired requests remain pending but are excluded from claims; infeasible or no-longer-serviceable claims remain pending too. Manual triggers respect the collection policy. Late insertion is a separate feasibility-based path. Driver offers are Java services without HTTP operations; batching does not automatically dispatch. Escalation reading does not create escalations.
                                 """)
                         .version("v0.0.1"))
                 .addSecurityItem(new SecurityRequirement().addList(securitySchemeName))
