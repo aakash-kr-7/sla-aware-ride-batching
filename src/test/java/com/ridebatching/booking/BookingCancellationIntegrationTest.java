@@ -7,7 +7,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.util.UUID;
@@ -36,9 +35,9 @@ class BookingCancellationIntegrationTest extends com.ridebatching.AbstractPostgr
     @Autowired
     private EmployeeRepository employeeRepository;
     @Autowired private com.ridebatching.zone.ServiceableZoneRepository zones;
+    @Autowired private com.ridebatching.dispatch.DispatchService dispatch;
 
     @Test
-    @Transactional
     void shouldCancelBookingAndReplanTripWhileLeavingOtherTripsUnchanged() {
         zones.saveAllAndFlush(List.of(
                 new com.ridebatching.zone.ServiceableZone("First", 12.9716, 77.5946, 1000, true),
@@ -68,32 +67,19 @@ class BookingCancellationIntegrationTest extends com.ridebatching.AbstractPostgr
         BatchingService.BatchingResult res = batchingService.formBatches();
         assertTrue(res.tripsFormed() >= 2);
 
-        // Fetch bookings to get their trips
-        List<Trip> trips = tripRepository.findAll();
-        Trip tripABefore = trips.get(0);
-        Trip tripBBefore = trips.get(1);
-        UUID tripAId = tripABefore.getId();
-        UUID tripBId = tripBBefore.getId();
-        
-        // Pick a booking from tripA to cancel
-        UUID bookingToCancelId = tripABefore.getStops().get(0).getBookingId();
-        Booking bookingToCancel = bookingRepository.findById(bookingToCancelId).orElseThrow();
-        UUID empIdToCancel = bookingToCancel.getEmployee().getId();
+        UUID tripAId = bookingRepository.findById(b1.getId()).orElseThrow().getTripId();
+        UUID tripBId = bookingRepository.findById(b3.getId()).orElseThrow().getTripId();
+        var tripABefore = dispatch.getTrip(tripAId);
+        var tripBBefore = dispatch.getTrip(tripBId);
+        var otherUpdated = tripRepository.findById(tripBId).orElseThrow().getUpdatedAt();
 
-        int tripBStopsCountBefore = tripBBefore.getStops().size();
-        int tripAStopsCountBefore = tripABefore.getStops().size();
+        bookingService.cancelBooking(emp1.getId(), b1.getId());
 
-        // Cancel the booking
-        bookingService.cancelBooking(empIdToCancel, bookingToCancelId);
-
-        // Validate Trip A
-        Trip tripAAfter = tripRepository.findById(tripAId).orElseThrow();
-        assertEquals(tripAStopsCountBefore - 2, tripAAfter.getStops().size()); // Pickup and dropoff removed
-
-        // Validate Trip B is unchanged
-        Trip tripBAfter = tripRepository.findById(tripBId).orElseThrow();
-        assertEquals(tripBStopsCountBefore, tripBAfter.getStops().size());
-        assertEquals(tripBBefore.getUpdatedAt(), tripBAfter.getUpdatedAt()); // untouched
+        var tripAAfter = dispatch.getTrip(tripAId);
+        assertEquals(tripABefore.stops().size() - 2, tripAAfter.stops().size());
+        assertTrue(tripAAfter.stops().stream().noneMatch(stop -> stop.bookingId().equals(b1.getId())));
+        assertEquals(tripBBefore, dispatch.getTrip(tripBId));
+        assertEquals(otherUpdated, tripRepository.findById(tripBId).orElseThrow().getUpdatedAt());
     }
     
     private Booking createTestBooking(Employee emp, double lat, double lon) {

@@ -97,7 +97,25 @@ public class Booking {
         this.status = BookingStatus.CANCELLED;
     }
 
-    public void setStatus(BookingStatus status) {
-        this.status = status;
+    /** Confirmation records a planned route, not driver acceptance or physical pickup. */
+    public void confirm() {
+        requireStatus(BookingStatus.PENDING);
+        if (tripId == null) throw new com.ridebatching.api.DomainConflictException("Confirmation requires a planned trip");
+        status = BookingStatus.CONFIRMED;
+    }
+
+    public void pickUp() {
+        requireStatus(BookingStatus.CONFIRMED);
+        status = BookingStatus.PICKED_UP;
+    }
+
+    public void dropOff() {
+        requireStatus(BookingStatus.PICKED_UP);
+        status = BookingStatus.DROPPED;
+    }
+
+    private void requireStatus(BookingStatus expected) {
+        if (status != expected) throw new com.ridebatching.api.DomainConflictException(
+                "Booking transition requires " + expected + ", current status is " + status);
     }
 }

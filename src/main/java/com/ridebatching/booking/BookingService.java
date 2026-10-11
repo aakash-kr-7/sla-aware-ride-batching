@@ -40,6 +40,8 @@ public class BookingService {
     private final BatchingService batchingService;
     private final MeterRegistry meterRegistry;
     private final com.ridebatching.dispatch.DispatchService dispatchService;
+    private final com.ridebatching.trip.TripRouteTiming routeTiming;
+    private final com.ridebatching.escalation.BookingSlaEscalations escalations;
 
     public BookingService(BookingRepository bookingRepository,
                           EmployeeRepository employeeRepository,
@@ -49,7 +51,9 @@ public class BookingService {
                           TripRepository tripRepository,
                           @org.springframework.context.annotation.Lazy BatchingService batchingService,
                           MeterRegistry meterRegistry,
-                          com.ridebatching.dispatch.DispatchService dispatchService) {
+                          com.ridebatching.dispatch.DispatchService dispatchService,
+                          com.ridebatching.trip.TripRouteTiming routeTiming,
+                          com.ridebatching.escalation.BookingSlaEscalations escalations) {
         this.bookingRepository = bookingRepository;
         this.employeeRepository = employeeRepository;
         this.serviceabilityService = serviceabilityService;
@@ -59,6 +63,8 @@ public class BookingService {
         this.batchingService = batchingService;
         this.meterRegistry = meterRegistry;
         this.dispatchService = dispatchService;
+        this.routeTiming = routeTiming;
+        this.escalations = escalations;
     }
 
     @Transactional
@@ -129,20 +135,26 @@ public class BookingService {
             throw new org.springframework.security.access.AccessDeniedException("Booking does not belong to the requested employee");
         }
         
-        booking.cancel();
+        if (booking.getStatus() == BookingStatus.CANCELLED) return mapToResponse(booking);
         
         if (booking.getTripId() != null) {
             Trip trip = tripRepository.findByIdForUpdate(booking.getTripId())
                     .orElseThrow(() -> new IllegalStateException("Trip not found for booking"));
+            trip.requireBeforeExecution();
+            booking.cancel();
             trip.removeBooking(bookingId);
             tripRepository.save(trip);
             if (trip.getStatus() == com.ridebatching.trip.TripStatus.CANCELLED) {
                 dispatchService.cancelTripAssignments(trip.getId());
+            } else {
+                routeTiming.afterCancellation(trip);
             }
             
             meterRegistry.counter("bookings.cancellation_replans").increment();
             log.info("Cancellation replan: Removed booking from existing trip");
-        }
+        } else booking.cancel();
+
+        escalations.resolve(bookingId, routeTiming.now());
         
         Booking saved = bookingRepository.save(booking);
         return mapToResponse(saved);

@@ -60,6 +60,25 @@ public class Trip {
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
 
+    public void requireBeforeExecution() {
+        if (status != TripStatus.PLANNED && status != TripStatus.DISPATCHED)
+            throw new com.ridebatching.api.DomainConflictException("Trip route can change only before the first pickup");
+    }
+
+    public void startExecution() {
+        if (status != TripStatus.DISPATCHED)
+            throw new com.ridebatching.api.DomainConflictException("Execution requires an accepted driver assignment");
+        status = TripStatus.IN_PROGRESS;
+        updatedAt = Instant.now();
+    }
+
+    public void completeExecution() {
+        if (status != TripStatus.IN_PROGRESS)
+            throw new com.ridebatching.api.DomainConflictException("Only an executing trip can complete");
+        status = TripStatus.COMPLETED;
+        updatedAt = Instant.now();
+    }
+
     public void assignTo(UUID driverId) {
         if (this.status == TripStatus.DISPATCHED && this.driverId != null && this.driverId.equals(driverId)) {
             return;
@@ -95,6 +114,7 @@ public class Trip {
      * must occur before its drop-off stop.
      */
     public void assignRoute(List<TripStop> route) {
+        requireBeforeExecution();
         route = new ArrayList<>(route);
         validatePickupBeforeDropoff(route);
         
@@ -109,6 +129,7 @@ public class Trip {
     }
 
     public void removeBooking(UUID bookingId) {
+        requireBeforeExecution();
         boolean removed = false;
         List<TripStop> remainingStops = new ArrayList<>();
         for (TripStop stop : this.stops) {

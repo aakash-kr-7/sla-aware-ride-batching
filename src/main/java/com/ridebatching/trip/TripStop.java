@@ -32,6 +32,7 @@ public class TripStop {
     
     private double latitude;
     private double longitude;
+    private java.time.Instant estimatedArrivalAt;
 
     protected TripStop() {
         // JPA required
@@ -50,6 +51,8 @@ public class TripStop {
     public UUID getBookingId() { return bookingId; }
     public TripStopType getType() { return type; }
     public int getSequenceOrder() { return sequenceOrder; }
+    public java.time.Instant getEstimatedArrivalAt() { return estimatedArrivalAt; }
+    void setEstimatedArrivalAt(java.time.Instant arrival) { this.estimatedArrivalAt = arrival; }
     
     public GeoPoint getLocation() {
         return new GeoPoint(latitude, longitude);

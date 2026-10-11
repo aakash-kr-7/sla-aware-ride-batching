@@ -84,7 +84,8 @@ public class DispatchService {
         Driver driver = drivers.findByIdForUpdate(offer.getDriverId()).orElseThrow();
         entityManager.refresh(driver);
         if (offer.getStatus() == DriverOfferStatus.ACCEPTED) {
-            if (trip.getStatus() == TripStatus.DISPATCHED && driver.getId().equals(trip.getDriverId())
+            if ((trip.getStatus() == TripStatus.DISPATCHED || trip.getStatus() == TripStatus.IN_PROGRESS)
+                    && driver.getId().equals(trip.getDriverId())
                     && trip.getId().equals(driver.getActiveTripId())) return view(trip, clock.instant());
             throw new DomainConflictException("Accepted offer no longer has an active assignment");
         }
@@ -165,6 +166,8 @@ public class DispatchService {
         DispatchOutcome outcome;
         if (trip.getStatus() == TripStatus.CANCELLED) outcome = DispatchOutcome.CANCELLED;
         else if (trip.getStatus() == TripStatus.DISPATCHED) outcome = DispatchOutcome.ASSIGNED;
+        else if (trip.getStatus() == TripStatus.IN_PROGRESS) outcome = DispatchOutcome.IN_PROGRESS;
+        else if (trip.getStatus() == TripStatus.COMPLETED) outcome = DispatchOutcome.COMPLETED;
         else if (trip.getStatus() != TripStatus.PLANNED) outcome = DispatchOutcome.TRIP_NOT_PLANNED;
         else if (active != null) outcome = active.hasExpired(now) ? DispatchOutcome.OFFER_EXPIRED : DispatchOutcome.OFFERED;
         else if (history.size() >= attemptLimit) outcome = DispatchOutcome.ATTEMPT_LIMIT_REACHED;
@@ -181,7 +184,7 @@ public class DispatchService {
                 active == null ? null : active.getId(), history.size(), attemptLimit,
                 history.stream().map(o -> new DispatchView.Offer(o.getId(), o.getDriverId(), o.getStatus(),
                         o.getCreatedAt(), o.getExpiresAt(), o.getUpdatedAt())).toList(),
-                trip.getStops().stream().map(s -> new DispatchView.Stop(s.getSequenceOrder(), s.getBookingId(), s.getType(), s.getLocation())).toList());
+                trip.getStops().stream().map(s -> new DispatchView.Stop(s.getSequenceOrder(), s.getBookingId(), s.getType(), s.getLocation(), s.getEstimatedArrivalAt())).toList());
     }
 
     private List<DriverOffer> history(UUID tripId) {

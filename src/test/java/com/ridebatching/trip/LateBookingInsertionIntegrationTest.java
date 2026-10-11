@@ -18,7 +18,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
@@ -34,7 +33,6 @@ import org.junit.jupiter.api.BeforeEach;
 @SpringBootTest
 @Testcontainers
 @ActiveProfiles("test")
-@Transactional
 public class LateBookingInsertionIntegrationTest extends AbstractPostgresIntegrationTest {
 
     @Autowired
@@ -51,6 +49,7 @@ public class LateBookingInsertionIntegrationTest extends AbstractPostgresIntegra
 
     @Autowired
     private TripRepository tripRepository;
+    @Autowired private com.ridebatching.dispatch.DispatchService dispatch;
     
     @Autowired
     private ServiceableZoneRepository serviceableZoneRepository;
@@ -94,8 +93,8 @@ public class LateBookingInsertionIntegrationTest extends AbstractPostgresIntegra
         assertEquals(BookingStatus.CONFIRMED, b3Response.status());
         assertEquals(tripId, b3Response.tripId());
         
-        var tripAfter = tripRepository.findById(tripId).orElseThrow();
-        assertEquals(6, tripAfter.getStops().size()); // 3 pickups, 3 dropoffs
+        var tripAfter = dispatch.getTrip(tripId);
+        assertEquals(6, tripAfter.stops().size()); // 3 pickups, 3 dropoffs
     }
     
     @Test

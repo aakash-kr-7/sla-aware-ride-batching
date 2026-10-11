@@ -12,5 +12,5 @@ public record DispatchView(UUID tripId, TripStatus tripStatus, UUID assignedDriv
                            int attemptsUsed, int attemptLimit, List<Offer> offers, List<Stop> stops) {
     public record Offer(UUID id, UUID driverId, DriverOfferStatus status,
                         Instant createdAt, Instant expiresAt, Instant updatedAt) {}
-    public record Stop(int sequence, UUID bookingId, TripStopType type, GeoPoint location) {}
+    public record Stop(int sequence, UUID bookingId, TripStopType type, GeoPoint location, Instant estimatedArrivalAt) {}
 }

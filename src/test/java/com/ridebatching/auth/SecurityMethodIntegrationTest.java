@@ -188,8 +188,9 @@ class SecurityMethodIntegrationTest extends AbstractPostgresIntegrationTest {
     @Test
     void invalidCancellationStateReturnsConflictWithoutChangingBooking() throws Exception {
         Booking booking = bookingRepository.findById(bookingEmp1Id).orElseThrow();
-        booking.setStatus(BookingStatus.DROPPED);
-        bookingRepository.saveAndFlush(booking);
+        bookingRepository.saveAndFlush(new Booking(booking.getId(), booking.getEmployee(), booking.getPickupLocation(),
+                booking.getDropoffLocation(), booking.getSlotTimestamp(), BookingStatus.DROPPED,
+                booking.getPickupSlaDeadline(), booking.getCreatedAt(), booking.getDeduplicationKey()));
         mockMvc.perform(delete("/api/v1/bookings/" + bookingEmp1Id)
                 .header("Authorization", tokenEmp1).header("X-Employee-Id", emp1Id))
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("STATE_CONFLICT"))

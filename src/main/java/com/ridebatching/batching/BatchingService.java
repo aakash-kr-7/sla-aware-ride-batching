@@ -35,13 +35,15 @@ public class BatchingService {
     private final Clock clock;
     private final com.ridebatching.dispatch.DispatchService dispatch;
     private final com.ridebatching.escalation.BookingSlaEscalations escalations;
+    private final com.ridebatching.trip.TripRouteTiming routeTiming;
 
     public BatchingService(BookingRepository bookingRepository, TripRepository tripRepository, BatchPlanner batchPlanner,
                            jakarta.persistence.EntityManager entityManager, MeterRegistry meterRegistry,
                            BatchClaimPolicy claimPolicy, RequestClusterer clusterer,
                            @org.springframework.beans.factory.annotation.Qualifier("batchingClock") Clock clock,
                            com.ridebatching.dispatch.DispatchService dispatch,
-                           com.ridebatching.escalation.BookingSlaEscalations escalations) {
+                           com.ridebatching.escalation.BookingSlaEscalations escalations,
+                           com.ridebatching.trip.TripRouteTiming routeTiming) {
         this.bookingRepository = bookingRepository;
         this.tripRepository = tripRepository;
         this.batchPlanner = batchPlanner;
@@ -52,6 +54,7 @@ public class BatchingService {
         this.clock = clock;
         this.dispatch = dispatch;
         this.escalations = escalations;
+        this.routeTiming = routeTiming;
     }
 
     public record BatchingResult(int bookingsConsidered, int tripsFormed, int bookingsLeftPending) {}
@@ -100,13 +103,15 @@ public class BatchingService {
             }
         
             // 3. Persist trips (cascades to TripStop)
+            trips.forEach(trip -> routeTiming.calculate(trip, routeStartTime));
             tripRepository.saveAll(trips);
         
             // 4. Update booking statuses
             int assignedCount = 0;
             for (Booking booking : pendingBookings) {
                 if (booking.getTripId() != null) {
-                    booking.setStatus(BookingStatus.CONFIRMED);
+                    booking.confirm();
+                    escalations.resolve(booking.getId(), routeStartTime);
                     assignedCount++;
                 }
             }
@@ -163,7 +168,7 @@ public class BatchingService {
         com.ridebatching.fleet.Vehicle dummyVehicle = new com.ridebatching.fleet.Vehicle(UUID.randomUUID(), batchPlanner.getDefaultVehicleCapacity());
 
         BatchPlanner.InsertionResult initialResult = batchPlanner.findBestTripForInsertion(
-                candidateTrips, booking, currentBookings, Instant.now(), dummyVehicle);
+                candidateTrips, booking, currentBookings, clock.instant(), dummyVehicle);
 
         if (initialResult != null) {
             // Reload the aggregate after acquiring its row lock. Cascaded REFRESH of the
@@ -180,15 +185,18 @@ public class BatchingService {
                 currentBookings.put(booking.getId(), booking);
                 
                 // Re-verify after locking
+                Instant insertionTime = clock.instant();
                 BatchPlanner.InsertionResult finalResult = batchPlanner.findBestTripForInsertion(
-                        List.of(lockedTrip), booking, currentBookings, Instant.now(), dummyVehicle);
+                        List.of(lockedTrip), booking, currentBookings, insertionTime, dummyVehicle);
                 
                 if (finalResult != null) {
                     lockedTrip.assignRoute(finalResult.route());
+                    routeTiming.calculate(lockedTrip, insertionTime);
                     tripRepository.save(lockedTrip);
                     
                     booking.setTripId(lockedTrip.getId());
-                    booking.setStatus(BookingStatus.CONFIRMED);
+                    booking.confirm();
+                    escalations.resolve(booking.getId(), insertionTime);
                     bookingRepository.save(booking);
                     meterRegistry.counter("batching.late_insertion", "result", "success").increment();
                     log.info("Late insertion result: success for booking");

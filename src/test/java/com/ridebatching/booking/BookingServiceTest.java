@@ -50,6 +50,8 @@ class BookingServiceTest {
     private com.ridebatching.batching.BatchingService batchingService;
     @Mock
     private com.ridebatching.dispatch.DispatchService dispatchService;
+    @Mock private com.ridebatching.trip.TripRouteTiming routeTiming;
+    @Mock private com.ridebatching.escalation.BookingSlaEscalations escalations;
 
     @org.mockito.Spy
     private io.micrometer.core.instrument.simple.SimpleMeterRegistry meterRegistry =
