@@ -48,14 +48,14 @@ public class BookingController {
     }
 
     @GetMapping("/{id}")
-    @Operation(summary = "Inspect one booking's status and trip association", description = "Use the id returned by creation or listing. Owners and admins may read it. A null tripId means no association; CONFIRMED does not mean physically picked up. This response does not include the trip's ordered stops.")
+    @Operation(summary = "Inspect one booking's status and trip association", description = "Use the id returned by creation or listing. Owners and admins may read it. A null tripId means no association; CONFIRMED means feasible route association, independently of driver acceptance. PICKED_UP/DROPPED are advanced through admin execution simulation after acceptance. This response does not include the trip's ordered stops.")
     @PostAuthorize("hasRole('ADMIN') or returnObject.employeeId() == authentication.principal.employeeId")
     public BookingResponse getBooking(@Parameter(description = "Booking id copied from a create/list response, not an employee or trip id.") @PathVariable UUID id) {
         return bookingService.getBooking(id);
     }
 
     @org.springframework.web.bind.annotation.DeleteMapping("/{id}")
-    @Operation(summary = "Cancel a booking and update its affected trip", description = "Changes data. Cancels PENDING/CONFIRMED bookings, removes their pickup/dropoff stops and resequences the affected route. Unrelated trips are retained. The employee header must identify the booking owner, including for an admin. This is stop removal/resequencing, not a new route optimization.")
+    @Operation(summary = "Cancel a booking and update its affected trip", description = "Changes data. Cancels PENDING bookings or CONFIRMED bookings only before any pickup in their trip. Removes pickup/dropoff stops, resequences and recomputes remaining arrival estimates; flags remaining missed pickup deadlines. Once execution starts, returns 409 STATE_CONFLICT even for an unpicked rider. Repeat cancellation is idempotent. Unrelated trips are retained. The employee header must identify the booking owner, including for an admin. This is stop removal/resequencing, not a new route optimization.")
     @PreAuthorize("hasRole('ADMIN') or #employeeId == authentication.principal.employeeId")
     public BookingResponse cancelBooking(
             @Parameter(description = "UUID of the employee who owns this booking; non-admin callers must also match their account.")

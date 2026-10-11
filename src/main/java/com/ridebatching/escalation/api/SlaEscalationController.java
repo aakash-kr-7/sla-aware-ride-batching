@@ -30,7 +30,7 @@ public class SlaEscalationController {
     }
 
     @GetMapping("/open")
-    @Operation(summary = "Read existing open escalation records", description = "Admin or approver only. Read-only list of previously stored OPEN records; an empty list is possible. Batching currently does not create escalations automatically, and no escalation-resolution operation is exposed.")
+    @Operation(summary = "Read existing open escalation records", description = "Admin or approver only. Read-only list of previously stored OPEN records; an empty list is possible. Batching persists missed-solo-promise issues; pre-execution cancellation recalculates arrival estimates and flags remaining pickup risk. One OPEN issue per booking/reason is retained across repeated cycles. Cancelling a booking resolves its automatic issues; feasible cancellation recalculation resolves that pickup-risk issue. No manual escalation-resolution operation is exposed.")
     @PreAuthorize("hasRole('ADMIN') or hasRole('APPROVER')")
     public List<SlaEscalation> getOpenEscalations() {
         return escalationRepository.findByStatus(SlaEscalationStatus.OPEN);

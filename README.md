@@ -10,7 +10,7 @@ Ad-hoc employee pickups can produce unnecessary cab journeys. Nearby pickups and
 
 ## The important insight
 
-**Batching is an optimization; SLA, capacity and correctness are hard constraints.** The planner checks every rider before accepting a route. If sharing fails, it evaluates a solo trip; if that also fails, the booking stays pending.
+**Batching is an optimization; SLA, capacity and correctness are hard constraints.** The planner checks every rider before accepting a route. If sharing fails, it evaluates a solo trip; if its solo pickup promise is already missed, the booking stays pending with one open SLA escalation.
 
 ## What the system supports
 
@@ -18,8 +18,9 @@ Ad-hoc employee pickups can produce unnecessary cab journeys. Nearby pickups and
 | --- | --- |
 | Bookings | Authenticated creation, pickup-zone validation, logical deduplication, retrieval, pagination and cancellation |
 | Planning | Bounded closed-window/urgent claims; zone/direction grouping; manual or opt-in scheduled cycles; capacity, pickup SLA and detour checks |
-| Trip mutation | Late insertion into planned trips; cancellation removes and resequences only the affected route |
+| Trip mutation | Late insertion into planned trips; pre-execution cancellation removes stops and recomputes arrival estimates on the affected route |
 | Dispatch | Automatic initial offers, rejection/expiry re-offering, bounded attempts and atomic acceptance; authenticated admin simulation controls |
+| Lifecycle | Confirmed route, accepted driver, ordered pickup/dropoff, trip completion and driver release; admin execution simulation |
 | Operations | PostgreSQL persistence, Flyway migrations, JWT ownership/role checks, zone caching, health, metrics and Prometheus |
 
 The [requirements matrix](docs/requirements-traceability.md) links these claims to implementation, tests and explicit limitations.
@@ -48,7 +49,7 @@ New trips attempt their initial offer in the planning transaction. Rejection and
 
 ## Batching algorithm
 
-1. Claim at most 100 eligible bookings with PostgreSQL `FOR UPDATE SKIP LOCKED`, ordered by deadline, creation time and ID. Fixed UTC windows normally close after 15 minutes; requests within five minutes of their deadline can leave collection early. Expired requests remain pending but are excluded from claims.
+1. Claim at most 100 eligible bookings with PostgreSQL `FOR UPDATE SKIP LOCKED`, ordered by deadline, creation time and ID. Fixed UTC windows normally close after 15 minutes; requests within five minutes of their deadline can leave collection early. Expired requests remain pending, excluded from planning claims; a separate bounded pass persists missed-promise escalations.
 2. Partition by source window, active pickup zone and compatible leader direction, then sort each cluster by pickup deadline and booking ID.
 3. Enumerate pickup/dropoff insertion positions while preserving each existing trip's stop order.
 4. Evaluate the cheapest insertion per trip: route structure, peak occupancy, every pickup deadline and every rider's detour.
@@ -63,6 +64,7 @@ Only the cheapest insertion per trip is checked: a more expensive feasible alter
 - **Competing batch workers:** locked rows are skipped; trip persistence and booking confirmation commit or roll back together.
 - **Route mutations:** creation/insertion are atomic. Insertion and cancellation lock booking before trip; insertion reloads and rechecks current riders/state.
 - **Driver assignment:** acceptance locks trip, offer and driver, then rechecks eligibility and actual seat capacity. Offer creation and responses serialize on the trip; only one live offer is returned. Acceptance at/after expiry fails, and driver versions reject stale detached updates.
+- **Lifecycle:** pickup requires the accepted driver and next route stop. The first pickup closes cancellation for the entire trip. Execution and cancellation serialize on the trip; one OPEN escalation per booking/reason is enforced by a partial unique index.
 - **Stored invariants:** foreign keys and deferred stop uniqueness protect committed state. Empty-trip cancellation releases its driver and expires outstanding offers.
 
 PostgreSQL tests force these races and check committed outcomes. They cover concrete interleavings, not every possible execution. See [test evidence](docs/test-matrix.md) and [failure boundaries](docs/failure-modes.md).
@@ -102,7 +104,7 @@ On PowerShell use `./mvnw.cmd clean verify`. This runs the full suite and packag
 | Read | Purpose |
 | --- | --- |
 | [Requirements traceability](docs/requirements-traceability.md), [test matrix](docs/test-matrix.md) | Implementation claims, assertions and coverage gaps |
-| [Architecture](docs/architecture.md), [domain model](docs/domain-model.md) | Responsibilities, request flow and reachable states |
+| [Architecture](docs/architecture.md), [domain model](docs/domain-model.md), [booking lifecycle](docs/booking-lifecycle.md) | Responsibilities, request flow and reachable states |
 | [Batching strategy](docs/batching-strategy.md), [algorithm analysis](docs/algorithm-analysis.md) | Search, feasibility and computational cost |
 | [API contract](docs/api-design.md), [dispatch workflow](docs/dispatch-workflow.md), [local development](docs/local-development.md) | Actual endpoints, offer outcomes, startup and provisioning boundaries |
 | [Assumptions](docs/assumptions.md), [failure modes](docs/failure-modes.md) | Policy choices, approximations and operational limits |
@@ -112,13 +114,13 @@ Source lives in `src/main`, tests in `src/test`, and optional JMH source in `src
 
 ## Known limitations
 
-- Claim limits and competing workers can fragment clusters into extra trips. The urgency guard does not guarantee service under overload or downtime; expired requests need explicit recovery. Late-insertion candidate scans remain unbounded.
+- Claim limits and competing workers can fragment clusters into extra trips. The urgency guard does not guarantee service under overload or downtime; expired requests are escalated but still need a service remedy. Late-insertion candidate scans remain unbounded.
 - ETA uses straight-line distance, fixed speed/circuity and dwell; driver approach and live road/traffic data are absent. Computed SLA acceptance does not guarantee actual pickup time.
-- No driver authentication/notification transport, trip execution API or automatic escalation/resolution. Dispatch HTTP responses are explicitly admin simulations; offers do not reserve drivers. Late insertion supports planned trips only.
+- No driver authentication/notification transport or manual escalation-resolution API. Dispatch and pickup/dropoff HTTP operations are explicitly admin simulations; offers do not reserve drivers. Late insertion supports planned trips only.
 - Dispatch checks current capacity/eligibility and offer expiry, but does not recompute pickup SLA/detour after waiting for a response. Driver approach and offer waiting are absent from route ETA.
-- Cancellation removes/resequences stops without a new optimization or execution-time feasibility check. Zone caching has no cross-instance/direct-SQL invalidation.
-- Actuator metrics are public under the assessment policy. No backup/restore validation, load guarantee or deployment stack is supplied. Existing invalid legacy data must be repaired explicitly before migration V11.
+- Cancellation preserves remaining stop order, recomputes estimated arrivals and flags missed pickup deadlines; execution-time cancellation and new route optimization are unsupported. Zone caching has no cross-instance/direct-SQL invalidation.
+- Actuator metrics are public under the assessment policy. No backup/restore validation, load guarantee or deployment stack is supplied. Existing invalid legacy data must be repaired explicitly before migrations V11/V14.
 
 ## Future production evolution
 
-Complete trip execution and pending-request recovery workflows, calibrate road ETA/cancellation semantics, then measure load and validate operational access, cache freshness and recovery. These remain future work.
+Add actual driver execution/arrival evidence and operational SLA remedies, calibrate road ETA, then measure load and validate operational access, cache freshness and recovery. These remain future work.

@@ -24,18 +24,18 @@ flowchart LR
     Dispatch --> DB
 ```
 
-Batching attempts an initial driver offer for each new trip in the same transaction. Authenticated admin simulation endpoints expose inspection, rejection, acceptance and bounded advancement. A scheduled job advances due offers; no driver notification transport is supplied. Escalations have a read API, with no automatic producer or resolution workflow.
+Batching attempts an initial driver offer for each new trip in the same transaction. Authenticated admin simulation endpoints expose inspection, rejection, acceptance and bounded advancement. A scheduled job advances due offers; no driver notification transport is supplied. Batching persists missed-solo-promise escalations; cancellation recomputes arrival estimates and flags remaining pickup risk. Automatic issue writes and resolution share the mutation transaction. Admin execution simulation advances ordered stops and releases the driver on completion; see [lifecycle](booking-lifecycle.md).
 
 ## Code boundaries
 
 | Package | Responsibility / entry point |
 | --- | --- |
-| `booking` | [BookingService](../src/main/java/com/ridebatching/booking/BookingService.java): ingest, deduplicate, retrieve, cancel |
+| `booking` | [BookingService](../src/main/java/com/ridebatching/booking/BookingService.java): ingest, deduplicate, retrieve, cancel; [BookingExecutionService](../src/main/java/com/ridebatching/booking/BookingExecutionService.java): admin-simulated pickup/dropoff |
 | `batching` | [BatchingService](../src/main/java/com/ridebatching/batching/BatchingService.java): transactional orchestration; planner, constraints and evaluator are separate algorithm components |
-| `trip` | [Trip](../src/main/java/com/ridebatching/trip/Trip.java): ordered-stop aggregate; [RouteInsertionPlanner](../src/main/java/com/ridebatching/trip/RouteInsertionPlanner.java): insertion search |
+| `trip` | [Trip](../src/main/java/com/ridebatching/trip/Trip.java): ordered-stop aggregate; [RouteInsertionPlanner](../src/main/java/com/ridebatching/trip/RouteInsertionPlanner.java): insertion search; [TripRouteTiming](../src/main/java/com/ridebatching/trip/TripRouteTiming.java): persisted estimated arrivals |
 | `driver`, `dispatch` | Driver state, selection, offers and assignment |
 | `zone`, `geo`, `fleet` | Circular serviceability, distance/ETA estimates and non-persisted planning capacity |
-| `auth`, `escalation` | Account authentication/authorization and exception-record inspection |
+| `auth`, `escalation` | Account authentication/authorization and persisted SLA issue production/inspection |
 | `api`, `config`, `dev` | Shared HTTP concerns, framework wiring and opt-in local admin bootstrap |
 
 HTTP DTOs normally live beside their feature. Controllers translate requests; services coordinate persistence; domain types guard local state. The escalation read API currently returns entities directly. Algorithm components can be tested without HTTP or a database.
@@ -52,6 +52,7 @@ flowchart TD
     Late -->|Feasible planned trip| Confirm[Persist route and CONFIRMED association]
     Late -->|No fit| Pending[Return PENDING booking]
     Pending --> Trigger[Explicit admin trigger or enabled scheduler]
+    Trigger --> Expired[Separately claim expired requests; persist one OPEN issue]
     Trigger --> Claim[Bounded eligible claims with SKIP LOCKED]
     Claim --> Groups[Source windows then active zone/direction clusters]
     Groups --> Plan[Transactional trip planning]

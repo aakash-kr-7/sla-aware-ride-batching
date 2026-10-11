@@ -67,6 +67,7 @@ curl.exe -X POST "http://127.0.0.1:8080/api/admin/dispatch/trips/$tripId/advance
 | `DRIVERS_EXHAUSTED` | Offers were attempted and no currently eligible untried driver remains. This includes all available drivers rejecting. A newly available untried driver can still be considered if budget remains. |
 | `READY_FOR_RETRY` | No live offer, but an eligible untried driver is now available. Advance explicitly; reads do not create offers. |
 | `ATTEMPT_LIMIT_REACHED` | The persisted history has consumed the configured budget. No further offers; inspect/recover operationally. No reset or automatic escalation exists. |
+| `IN_PROGRESS` / `COMPLETED` | Admin-simulated execution has started / all riders dropped; completion releases the driver. |
 | `ASSIGNED` | Accepted offer, dispatched trip and driver's active-trip link were committed together. |
 | `CANCELLED` / `TRIP_NOT_PLANNED` | Cancelled or otherwise ineligible trip state; Advance returns state without offering it. |
 
@@ -80,7 +81,7 @@ All response paths acquire trip before offer. Acceptance then locks the driver a
 
 Accepting or rejecting an overdue offer returns `409 OFFER_EXPIRED`. **Expiry and next-offer processing intentionally commit despite that error.** Retrieve the trip to find its new state; retrying the stale offer cannot assign its former driver or consume another attempt while a live offer remains. Other transition/locking conflicts roll back normally.
 
-When cancellation removes the last rider, it locks the trip, expires outstanding offers and releases an accepted driver's matching active-trip link. Acceptance and cancellation serialize on the trip. If cancellation wins, acceptance returns `409 STATE_CONFLICT`; if acceptance wins first, cancellation releases that assignment. The final trip is cancelled and no driver remains actively assigned to it. A previously accepted offer can remain ACCEPTED as history; replaying it after cancellation still fails. Partial-rider cancellation keeps the remaining trip, as before.
+When cancellation removes the last rider, it locks the trip, expires outstanding offers and releases an accepted driver's matching active-trip link. Acceptance and cancellation serialize on the trip. If cancellation wins, acceptance returns `409 STATE_CONFLICT`; if acceptance wins first, cancellation releases that assignment. The final trip is cancelled and no driver remains actively assigned to it. A previously accepted offer can remain ACCEPTED as history; replaying it after cancellation still fails. Partial-rider cancellation keeps the remaining trip and recalculates its arrival estimates. Cancellation closes for the whole trip at the first pickup; see [booking lifecycle](booking-lifecycle.md).
 
 Repeated successful acceptance is idempotent only while its matching active assignment still exists. Rejection replay is idempotent while the trip remains planned. Missing trip/offer returns `404 DISPATCH_NOT_FOUND`; employee/approver callers are forbidden. See [API error contracts](api-design.md).
 
@@ -104,6 +105,6 @@ The tests use explicit clocks/manual expiry-job invocation; background expiry sc
 
 ## Remaining limits
 
-There is no driver login, notification delivery, trip execution or automatic escalation. Driver availability provisioning is still outside HTTP. Selection loads all drivers and checks trip-specific cool-off; a bounded offer budget does not bound fleet scans or lock wait duration. Reading paginated trip views also loads routes/history for each page item.
+There is no driver login or notification delivery. Ordered trip execution is an admin simulation; missed solo promises and cancellation timing risk are automatically escalated, but dispatch exhaustion is not. Driver availability provisioning is still outside HTTP. Selection loads all drivers and checks trip-specific cool-off; a bounded offer budget does not bound fleet scans or lock wait duration. Reading paginated trip views also loads routes/history for each page item.
 
-Pickup SLA/detour are evaluated at planning and insertion time. Acceptance checks expiry, current eligibility and capacity; it does not recompute route feasibility after offer waiting or include driver approach time. A feasible planned trip and accepted offer do not establish actual pickup performance. These limitations need an explicit execution/ETA policy before use with real riders.
+Pickup SLA/detour are evaluated at planning and insertion time. Acceptance checks expiry, current eligibility and capacity; it does not recompute route feasibility after offer waiting or include driver approach time. A feasible planned trip and accepted offer do not establish actual pickup performance. The [execution/cancellation policy](booking-lifecycle.md) makes statuses reachable but does not measure actual road arrival; these ETA limitations remain before use with real riders.

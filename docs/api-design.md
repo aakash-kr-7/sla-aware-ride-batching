@@ -2,7 +2,7 @@
 
 Swagger UI: `/swagger-ui/index.html`. Generated schema: `/v3/api-docs`.
 
-The opening description explains the sequence: login, Authorize with the returned token, list/create a booking, switch to an admin token for batching, then retrieve the booking to inspect status/trip association. Admin dispatch simulation lists routes and offer history, rejects the stored driver's offer to see the next driver, and accepts to commit assignment. Endpoint summaries and parameter descriptions identify required IDs and which calls change data. Example coordinates are illustrative and require configured business records; startup seeds none.
+The opening description explains the sequence: login, Authorize with the returned token, list/create a booking, switch to an admin token for batching, then retrieve the booking to inspect status/trip association. Admin dispatch simulation lists routes and offer history, rejects the stored driver's offer to see the next driver, and accepts to commit assignment. Admin execution simulation then advances ordered pickup/dropoff stops through trip completion. Endpoint summaries and parameter descriptions identify required IDs and which calls change data. Example coordinates are illustrative and require configured business records; startup seeds none.
 
 ## Authentication and access
 
@@ -45,7 +45,7 @@ The page contains `content`, `totalElements`, `totalPages`, `size`, `number` (ze
 | POST | `/api/admin/batching/trigger` | ADMIN | No body; returns `bookingsConsidered`, `tripsFormed`, `bookingsLeftPending` |
 | GET | `/api/v1/escalations/open` | ADMIN or APPROVER | Open entities: `id`, `referenceId`, `referenceType`, `reason`, `status`, `createdAt`, `updatedAt` |
 
-Batching accepts no window/force parameter. It claims at most the configured limit (default 100) of closed-window or urgent unexpired pending bookings, then groups by source window, zone and direction. Open-window bookings with more than the configured urgent budget remain collecting, including on manual triggers. Expired bookings remain pending but are excluded from claims. Counts describe this cycle's claims, not the total queue; zero considered can coexist with saved pending bookings. See [exact rules and settings](batching-strategy.md#collection-and-eligibility-rules). Escalations must currently be supplied separately; batching does not create them.
+Batching accepts no window/force parameter. It claims at most the configured limit (default 100) of closed-window or urgent unexpired pending bookings, then groups by source window, zone and direction. Open-window bookings with more than the configured urgent budget remain collecting, including on manual triggers. Expired bookings remain pending but are excluded from claims. Counts describe this cycle's claims, not the total queue; zero considered can coexist with saved pending bookings. See [exact rules and settings](batching-strategy.md#collection-and-eligibility-rules). A separate bounded pass persists one OPEN issue per expired pending booking/reason; cancellation resolves its automatic issues. Eligible-claim counts exclude that recovery pass. See [lifecycle and failure policy](booking-lifecycle.md).
 
 Each newly formed trip attempts its initial offer in the batching transaction. An unavailable driver does not undo a feasible route; dispatch inspection shows the outcome.
 
@@ -63,7 +63,16 @@ All five operations require ADMIN. No employee header, driver ID or request body
 | POST | `/api/admin/dispatch/offers/{offerId}/reject` | Reject and automatically consider next driver |
 | POST | `/api/admin/dispatch/offers/{offerId}/accept` | Commit assignment after locked rechecks; return trip view |
 
-`DispatchView` contains `tripId`, `tripStatus`, `assignedDriverId`, `peakPassengers`, `outcome`, `activeOfferId`, `attemptsUsed`, `attemptLimit`, `offers` and `stops`. Offer items include ID, stored driver ID, status and created/expiry/updated timestamps; stops include sequence, booking ID, type and location. These views avoid serializing managed entities. Peak passengers is occupancy, not vehicle capacity. Outcomes, expiry semantics and reproduction commands are [documented here](dispatch-workflow.md).
+`DispatchView` contains `tripId`, `tripStatus`, `assignedDriverId`, `peakPassengers`, `outcome`, `activeOfferId`, `attemptsUsed`, `attemptLimit`, `offers` and `stops`. Offer items include ID, stored driver ID, status and created/expiry/updated timestamps; stops include sequence, booking ID, type, location and `estimatedArrivalAt` (nullable for legacy routes). These views avoid serializing managed entities. Peak passengers is occupancy, not vehicle capacity. Outcomes, expiry semantics and reproduction commands are [documented here](dispatch-workflow.md).
+
+## Admin execution simulation
+
+| Method | Route | Result |
+| --- | --- | --- |
+| POST | `/api/admin/bookings/{bookingId}/pickup` | Booking PICKED_UP; first pickup starts trip IN_PROGRESS |
+| POST | `/api/admin/bookings/{bookingId}/dropoff` | Booking DROPPED; final dropoff completes trip and releases driver |
+
+Both require ADMIN, take no body and use the accepted driver already stored on the trip. Execute only the next unfinished stop from the dispatch view. CONFIRMED means feasible route association, not driver acceptance. Invalid order, missing acceptance, repeats or terminal states return 409 STATE_CONFLICT. Cancellation is supported only until the first pickup anywhere in the trip; it recomputes remaining arrival estimates. See [exact rules and evidence](booking-lifecycle.md).
 
 ## Error contracts and limits
 
@@ -73,4 +82,4 @@ Missing trip/offer returns 404 `DISPATCH_NOT_FOUND`. Acceptance/rejection at off
 
 Login failure is plain text. Invalid arguments return 400 (`INVALID_REQUEST`); explicit domain transitions and optimistic/pessimistic lock conflicts return 409 (`STATE_CONFLICT`). Conflict responses do not echo database details. Unexpected internal failures remain server errors. The JWT filter handles only token/account authentication errors; it does not relabel downstream failures. See [failure modes](failure-modes.md).
 
-Trip execution, zone/fleet CRUD and escalation resolution have no HTTP routes. Admin-only dispatch inspection and simulated offer responses are available; see [dispatch workflow](dispatch-workflow.md).
+Zone/fleet CRUD and manual escalation resolution have no HTTP routes. Admin-only dispatch inspection and simulated offer responses are available; see [dispatch workflow](dispatch-workflow.md).

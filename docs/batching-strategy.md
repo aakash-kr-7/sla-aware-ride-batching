@@ -15,7 +15,7 @@ One UTC clock reading supplies eligibility and route-start estimates for the cyc
 | PENDING, no trip, creation time <= cycle time, deadline >= cycle time, source window closed | Eligible |
 | Same conditions, open source window, deadline <= cycle time + urgent lead time | Eligible early; default lead time is 300 seconds |
 | Open window and deadline beyond the urgent cutoff | Continue collecting; even an admin trigger does not bypass this rule |
-| Deadline < cycle time | Remain PENDING/unassociated for inspection; excluded from future claims, with no automatic escalation or deadline extension |
+| Deadline < cycle time | Remain PENDING/unassociated for inspection; excluded from planning claims; a separate bounded pass persists one OPEN missed-solo-promise escalation, without extending the deadline |
 | Deadline exactly equals cycle time | Eligible; the evaluator still checks feasibility, accepting an immediate first pickup at equality |
 | Future creation time, CANCELLED or already associated | Not claimed |
 | Pickup no longer resolves to an active zone | Claimed booking remains pending; logged and excluded from clusters, never grouped under an unknown-zone sentinel |
@@ -47,7 +47,7 @@ flowchart TD
 
 The greedy planner prefers sharing if any candidate fits. It chooses by added estimated route duration; equal costs choose the lower trip UUID. New trip UUIDs are random, so tie-breaking is stable for supplied identities, not a promise of identical grouping across fresh runs. There is no occupancy objective function or global trip-count optimum.
 
-Scheduling is disabled by default. The admin trigger runs one cycle; an enabled scheduler uses fixed delay, independently of booking-slot duration. Both paths attempt an initial driver offer for each newly planned trip in the same transaction. Neither creates escalations. Dispatch rejection/expiry and bounded retries are described in the [offer workflow](dispatch-workflow.md).
+Scheduling is disabled by default. The admin trigger runs one cycle; an enabled scheduler uses fixed delay, independently of booking-slot duration. Both paths attempt an initial driver offer for each newly planned trip in the same transaction. Both also run a separately bounded expired-request escalation pass; [lifecycle policy](booking-lifecycle.md) defines uniqueness, remedies and count semantics. Dispatch rejection/expiry and bounded retries are described in the [offer workflow](dispatch-workflow.md).
 
 ## Insertion search and acceptance
 
@@ -85,17 +85,20 @@ Booking mutations use booking-then-trip lock order. PostgreSQL regressions cover
 ```mermaid
 flowchart TD
     Cancel[Cancel request] --> Owner[Lock/reload booking and verify employee]
-    Owner --> State[Set CANCELLED; reject PICKED_UP/DROPPED]
-    State --> HasTrip{Associated trip?}
-    HasTrip -->|No| Commit[Save booking and commit]
+    Owner --> HasTrip{Associated trip?}
+    HasTrip -->|No| PendingCancel[Set booking CANCELLED; resolve its automatic issues]
+    PendingCancel --> Commit[Save booking and commit]
     HasTrip -->|Yes| Lock[Lock only associated trip]
-    Lock --> Remove[Remove this booking's stops]
+    Lock --> Boundary{Before first pickup?}
+    Boundary -->|No| Reject[409 STATE_CONFLICT]
+    Boundary -->|Yes| Remove[Cancel booking and remove its stops]
     Remove --> Empty{No stops remain?}
     Empty -->|Yes| CancelTrip[Set trip CANCELLED]
     Empty -->|No| Resequence[Preserve remaining order; resequence from 1]
     CancelTrip --> Release[Expire outstanding offers and release matching driver]
     Release --> Commit
-    Resequence --> Commit
+    Resequence --> Timing[Recompute arrival estimates; flag remaining pickup risk]
+    Timing --> Commit
 ```
 
-This implements localized stop removal, not a fresh route optimization. Unrelated trips are untouched. Cancellation is state-idempotent, rejects `PICKED_UP`/`DROPPED`, retains the booking's trip ID, and expires outstanding offers/releases the matching driver when the trip becomes empty. There is no execution-time feasibility recheck. Without road-metric assumptions, deleting a stop is not proof that every remaining ETA improves. [Tests](test-matrix.md) verify isolation, concurrent mutation and empty-trip cleanup; they do not establish complete execution-time replanning.
+This implements localized stop removal, not a fresh route optimization. Unrelated trips are untouched. Cancellation is state-idempotent, rejects executing/completed trips even for a CONFIRMED rider, retains the booking's trip ID, and expires outstanding offers/releases the matching driver when the trip becomes empty. Before execution, remaining estimated arrivals are recalculated and missed pickup promises are escalated. Execution-time cancellation is unsupported. See [timing assumptions and evidence](booking-lifecycle.md). Without road-metric assumptions, deleting a stop is not proof that every remaining ETA improves. [Tests](test-matrix.md) verify isolation, concurrent mutation and empty-trip cleanup; they do not establish complete execution-time replanning.
