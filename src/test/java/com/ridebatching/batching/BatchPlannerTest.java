@@ -96,7 +96,7 @@ class BatchPlannerTest {
         when(routeInsertionPlanner.planBestInsertion(List.of(), b2)).thenReturn(route2);
         // Try to insert b2 into b1's trip
         List<TripStop> combinedRoute = List.of(); // just some non-empty list
-        when(routeInsertionPlanner.planBestInsertion(route1, b2)).thenReturn(combinedRoute);
+        when(routeInsertionPlanner.planBestInsertion(eq(route1), eq(b2), any())).thenReturn(combinedRoute);
 
         // First booking feasible in empty trip
         when(feasibilityEvaluator.evaluate(eq(route1), any(), any(), eq(routeStart), eq(b1.getId())))

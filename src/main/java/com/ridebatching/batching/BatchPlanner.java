@@ -122,20 +122,15 @@ public class BatchPlanner {
         Duration bestIncrementalCost = null;
 
         for (Trip candidateTrip : candidateTrips) {
-            List<TripStop> candidateRoute = routeInsertionPlanner.planBestInsertion(candidateTrip.getStops(), booking);
-            if (candidateRoute.isEmpty()) {
-                continue;
-            }
-
             Map<UUID, Booking> routeBookings = new HashMap<>();
-            for (TripStop stop : candidateRoute) {
+            for (TripStop stop : candidateTrip.getStops()) {
                 routeBookings.put(stop.getBookingId(), allBookings.get(stop.getBookingId()));
             }
+            routeBookings.put(booking.getId(), booking);
+            List<TripStop> candidateRoute = routeInsertionPlanner.planBestInsertion(candidateTrip.getStops(), booking,
+                    route -> feasibilityEvaluator.evaluate(route, routeBookings, vehicle, routeStartTime, booking.getId()).isFeasible());
 
-            TripFeasibilityEvaluator.EvaluationTrace trace = feasibilityEvaluator.evaluate(
-                    candidateRoute, routeBookings, vehicle, routeStartTime, booking.getId());
-
-            if (trace.isFeasible()) {
+            if (!candidateRoute.isEmpty()) {
                 Duration currentCost = calculateRouteCost(candidateTrip.getStops());
                 Duration newCost = calculateRouteCost(candidateRoute);
                 Duration incrementalCost = newCost.minus(currentCost);

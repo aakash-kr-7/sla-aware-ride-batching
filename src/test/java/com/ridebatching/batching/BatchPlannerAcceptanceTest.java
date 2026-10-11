@@ -79,7 +79,7 @@ class BatchPlannerAcceptanceTest {
         // Given 5 requests starting at the exact same location and going to the exact same destination
         // They are perfectly compatible in terms of direction and time, but capacity is 4.
         Instant routeStart = Instant.parse("2026-10-10T10:00:00Z");
-        Instant slaDeadline = routeStart.plus(Duration.ofMinutes(15)); // Plenty of time
+        Instant slaDeadline = routeStart; // Every pickup must happen immediately; turnover cannot rescue capacity.
 
         List<Booking> bookings = List.of(
                 createBooking(0, 0, 0.01, 0.01, slaDeadline),
@@ -105,6 +105,17 @@ class BatchPlannerAcceptanceTest {
     }
 
     @Test
+    void fiveBookingsCanUseOneFourSeatTripWhenDeadlinesPermitPassengerTurnover() {
+        Instant start = Instant.parse("2026-10-10T10:00:00Z");
+        var requests = java.util.stream.IntStream.range(0, 5)
+                .mapToObj(i -> createBooking(0, 0, 0.01, 0.01, start.plusSeconds(900))).toList();
+        var planned = batchPlanner.planBatch(requests, start);
+        assertThat(planned).hasSize(1);
+        assertThat(planned.get(0).getStops()).hasSize(10);
+        assertThat(planned.get(0).getPeakPassengers()).isLessThanOrEqualTo(4);
+    }
+
+    @Test
     void shouldSplitClusterCompatibleRequestsIfSlaIsMissed() {
         // Given a cluster of 2 requests that are somewhat far apart.
         // Putting them together would make the second request miss its SLA because of the travel time to pick it up.
@@ -112,13 +123,13 @@ class BatchPlannerAcceptanceTest {
         Instant routeStart = Instant.parse("2026-10-10T10:00:00Z");
         
         // Request 1: Pick up at (0, 0), dropoff at (0, 0.02)
-        // SLA is generous
-        Booking b1 = createBooking(0, 0, 0, 0.02, routeStart.plus(Duration.ofMinutes(30)));
+        // Both pickups are urgent: neither ordering can reach the other pickup in time.
+        Booking b1 = createBooking(0, 0, 0, 0.02, routeStart.plus(Duration.ofMinutes(5)));
         
         // Request 2: Pick up at (0.05, 0), dropoff at (0.05, 0.02)
         // Note: 1 degree latitude is ~111km. 0.05 degrees is ~5.5km.
         // At 10m/s, travelling 5.5km takes 550 seconds (9+ minutes).
-        // If Request 2's SLA deadline is 5 minutes from routeStart, picking up b1 first will cause b2 to miss SLA.
+        // With both deadlines five minutes away, every shared ordering misses at least one pickup.
         Booking b2 = createBooking(0.05, 0, 0.05, 0.02, routeStart.plus(Duration.ofMinutes(5)));
         
         List<Booking> bookings = List.of(b1, b2);

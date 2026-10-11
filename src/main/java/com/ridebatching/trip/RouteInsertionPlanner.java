@@ -8,6 +8,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Predicate;
 
 @Component
 public class RouteInsertionPlanner {
@@ -36,6 +37,12 @@ public class RouteInsertionPlanner {
      * @return The new route with lowest added travel time
      */
     public List<TripStop> planBestInsertion(List<TripStop> currentRoute, Booking booking) {
+        return planBestInsertion(currentRoute, booking, route -> true);
+    }
+
+    /** Streams alternatives; keeps only the cheapest accepted route, with the same index tie-break. */
+    public List<TripStop> planBestInsertion(List<TripStop> currentRoute, Booking booking,
+                                           Predicate<List<TripStop>> feasible) {
         List<TripStop> bestRoute = null;
         Duration bestCost = null;
 
@@ -51,7 +58,7 @@ public class RouteInsertionPlanner {
                 List<TripStop> candidateRoute = buildCandidateRoute(currentRoute, pickupIndex, dropoffIndex, pickupStop, dropoffStop);
                 Duration cost = calculateRouteCost(candidateRoute);
 
-                if (bestCost == null || cost.compareTo(bestCost) < 0) {
+                if ((bestCost == null || cost.compareTo(bestCost) < 0) && feasible.test(candidateRoute)) {
                     bestCost = cost;
                     bestRoute = candidateRoute;
                 }

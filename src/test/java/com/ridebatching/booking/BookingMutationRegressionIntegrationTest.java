@@ -203,7 +203,7 @@ class BookingMutationRegressionIntegrationTest extends AbstractPostgresIntegrati
     void postLockEvaluationMustReloadNewRiderAndCheckTheirDeadline() throws Exception {
         Booking original = booking(employee(), 3600);
         Trip existing = trip(original);
-        Booking late = booking(employee(), 3600);
+        Booking late = booking(employee(), 180);
         Booking added = booking(employee(), 180);
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try {
@@ -220,7 +220,7 @@ class BookingMutationRegressionIntegrationTest extends AbstractPostgresIntegrati
                 jdbc.update("UPDATE bookings SET status='CONFIRMED', trip_id=? WHERE id=?", existing.getId(), added.getId());
                 return insertion;
             });
-            // Cheapest extra insertion delays added rider to +6 minutes. Must reject, not use the stale map.
+            // Both tight pickup budgets prevent every insertion into the updated route, not just the cheapest.
             assertThat(result.get(10, TimeUnit.SECONDS)).isFalse();
             assertThat(bookings.findById(late.getId()).orElseThrow().getStatus()).isEqualTo(BookingStatus.PENDING);
             assertThat(stopCount(late.getId())).isZero();
