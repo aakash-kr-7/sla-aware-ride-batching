@@ -16,6 +16,7 @@ import java.util.List;
  * to inspect open escalations where SLAs are becoming unsafe.
  */
 import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.Operation;
 
 @RestController
 @RequestMapping("/api/v1/escalations")
@@ -29,6 +30,7 @@ public class SlaEscalationController {
     }
 
     @GetMapping("/open")
+    @Operation(summary = "Read existing open escalation records", description = "Admin or approver only. Read-only list of previously stored OPEN records; an empty list is possible. Batching currently does not create escalations automatically, and no escalation-resolution operation is exposed.")
     @PreAuthorize("hasRole('ADMIN') or hasRole('APPROVER')")
     public List<SlaEscalation> getOpenEscalations() {
         return escalationRepository.findByStatus(SlaEscalationStatus.OPEN);

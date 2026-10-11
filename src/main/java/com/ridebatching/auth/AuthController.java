@@ -15,6 +15,8 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 
 import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 
 @RestController
 @RequestMapping("/auth")
@@ -32,6 +34,8 @@ public class AuthController {
     }
 
     @PostMapping("/login")
+    @SecurityRequirements
+    @Operation(summary = "Log in and obtain an access token", description = "Public operation: no token is needed. Use an existing account. Copy the returned token into Authorize; login does not automatically authorize other operations. Invalid credentials return 401.")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
         authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(request.username(), request.password())

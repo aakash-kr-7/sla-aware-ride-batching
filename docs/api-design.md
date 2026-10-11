@@ -2,6 +2,8 @@
 
 Swagger UI: `/swagger-ui/index.html`. Generated schema: `/v3/api-docs`.
 
+The opening description explains the sequence: login, Authorize with the returned token, list/create a booking, switch to an admin token for batching, then retrieve the booking to inspect status/trip association. Endpoint summaries and parameter descriptions identify required IDs and which calls change data. Example coordinates are illustrative and require configured business records; startup seeds none.
+
 ## Authentication and access
 
 `POST /auth/login` is public. Request: `{"username":"<account>","password":"<password>"}`. Response: `{"token":"<JWT>"}`. Blank fields return 400; invalid credentials return 401 with text `Invalid credentials`.

@@ -22,6 +22,8 @@ import org.springframework.data.domain.Pageable;
 import java.util.UUID;
 
 import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 
 @RestController
 @RequestMapping("/api/v1/bookings")
@@ -35,31 +37,39 @@ public class BookingController {
     }
 
     @PostMapping
+    @Operation(summary = "Create or reuse a ride booking", description = "Requires an existing employee and serviceable pickup. The same employee, normalized endpoints and time slot return the existing active booking (201). New bookings are PENDING unless immediately inserted into a feasible planned trip. Outside-zone pickup returns 422. Slots and deadlines are server-assigned.")
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasRole('ADMIN') or #employeeId == authentication.principal.employeeId")
     public BookingResponse createBooking(
+            @Parameter(description = "Existing employee UUID. Must match the account's employee unless the caller is an admin.")
             @RequestHeader("X-Employee-Id") UUID employeeId,
             @Valid @RequestBody BookingRequest request) {
         return bookingService.createBooking(employeeId, request);
     }
 
     @GetMapping("/{id}")
+    @Operation(summary = "Inspect one booking's status and trip association", description = "Use the id returned by creation or listing. Owners and admins may read it. A null tripId means no association; CONFIRMED does not mean physically picked up. This response does not include the trip's ordered stops.")
     @PostAuthorize("hasRole('ADMIN') or returnObject.employeeId() == authentication.principal.employeeId")
-    public BookingResponse getBooking(@PathVariable UUID id) {
+    public BookingResponse getBooking(@Parameter(description = "Booking id copied from a create/list response, not an employee or trip id.") @PathVariable UUID id) {
         return bookingService.getBooking(id);
     }
 
     @org.springframework.web.bind.annotation.DeleteMapping("/{id}")
+    @Operation(summary = "Cancel a booking and update its affected trip", description = "Changes data. Cancels PENDING/CONFIRMED bookings, removes their pickup/dropoff stops and resequences the affected route. Unrelated trips are retained. The employee header must identify the booking owner, including for an admin. This is stop removal/resequencing, not a new route optimization.")
     @PreAuthorize("hasRole('ADMIN') or #employeeId == authentication.principal.employeeId")
     public BookingResponse cancelBooking(
+            @Parameter(description = "UUID of the employee who owns this booking; non-admin callers must also match their account.")
             @RequestHeader("X-Employee-Id") UUID employeeId,
+            @Parameter(description = "Booking id copied from a create/list response.")
             @PathVariable UUID id) {
         return bookingService.cancelBooking(employeeId, id);
     }
 
     @GetMapping
+    @Operation(summary = "List an employee's bookings", description = "Read-only inspection of current saved state. Set X-Employee-Id to an existing employee UUID; non-admin callers must match their account. Pagination is zero-based. The list includes cancelled bookings; it is not a list of every employee or every trip.")
     @PreAuthorize("hasRole('ADMIN') or #employeeId == authentication.principal.employeeId")
     public PageResponse<BookingResponse> listBookings(
+            @Parameter(description = "Employee whose bookings to read. Must match the account unless the caller is an admin.")
             @RequestHeader("X-Employee-Id") UUID employeeId,
             Pageable pageable) {
         Page<BookingResponse> page = bookingService.listBookingsByEmployee(employeeId, pageable);
