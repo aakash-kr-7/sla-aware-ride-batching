@@ -2,6 +2,8 @@
 
 Status: Implemented in transactional batch formation, with unit and PostgreSQL integration tests.
 
+Clustering reduces the routes worth comparing; it does not approve sharing. The [runtime pipeline](../batching-strategy.md) owns collection eligibility, and the planner still enforces every rider's hard constraints.
+
 ## Decision and rationale
 
 Partition bounded eligible claims by source UTC window, group each window by resolved pickup-zone ID, sort zones by ID and bookings by creation time/UUID, then add each booking to the first cluster whose leader bearing is within the configured angle. The first booking stays the leader. Pickups without an active zone remain pending and are omitted from grouping.

@@ -1,6 +1,8 @@
-# Algorithm Complexity Analysis
+# Algorithm cost and practical bounds
 
 This document analyses in-memory planning and related functions. Runtime batch formation claims at most the configured limit (default 100), partitions by source window, then clusters by active pickup zone and direction before planning. The separate late-insertion path remains unbounded.
+
+The important distinction is **bounded input versus bounded latency**. A row limit controls materialized planning work; it does not bound database scans, lock waits or total route length. The derivations below explain the remaining costs. [Planner behaviour](planner-and-eta.md) and [historical measurements](benchmarks/batching.md) provide context.
 
 ## Variables
 

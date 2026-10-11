@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="560" viewBox="0 0 1120 560" role="img" aria-labelledby="title desc">
+  <title id="title">One application, three workflow boundaries</title>
+  <desc id="desc">An HTTP client passes JWT authorization into booking, planning and dispatch services in one Spring Boot process. PostgreSQL owns durable state and locks; Caffeine caches the active zone list. Planning is distinct from driver acceptance and execution.</desc>
+  <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="#64748b"/></marker></defs>
+  <rect width="1120" height="560" rx="18" fill="#f8fafc"/>
+  <g font-family="Arial, sans-serif">
+    <text x="40" y="48" font-size="24" font-weight="700" fill="#0f172a">One application. Explicit transaction boundaries.</text>
+    <text x="40" y="77" font-size="15" fill="#475569">Spring Boot coordinates the workflow; PostgreSQL arbitrates competing writes.</text>
+    <rect x="40" y="112" width="190" height="230" rx="12" fill="#0f172a"/>
+    <text x="60" y="150" font-size="19" font-weight="700" fill="#fff">HTTP clients</text>
+    <text x="60" y="182" font-size="15" fill="#cbd5e1">Swagger UI</text>
+    <text x="60" y="209" font-size="15" fill="#cbd5e1">curl / local review</text>
+    <path d="M60 230 H210" stroke="#475569"/>
+    <text x="60" y="259" font-size="14" fill="#cbd5e1">Employee bookings</text>
+    <text x="60" y="285" font-size="14" fill="#cbd5e1">Admin simulation</text>
+    <text x="60" y="311" font-size="14" fill="#cbd5e1">Health / metrics</text>
+    <rect x="275" y="112" width="805" height="278" rx="12" fill="#fff" stroke="#cbd5e1"/>
+    <rect x="295" y="130" width="765" height="42" rx="8" fill="#e2e8f0"/>
+    <text x="315" y="157" font-size="16" font-weight="700" fill="#0f172a">JWT + current account role / employee ownership</text>
+    <path d="M230 150 H289" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="295" y="193" width="235" height="163" rx="8" fill="#ecfdf5" stroke="#a7f3d0"/>
+    <rect x="555" y="193" width="235" height="163" rx="8" fill="#eff6ff" stroke="#bfdbfe"/>
+    <rect x="815" y="193" width="245" height="163" rx="8" fill="#fff7ed" stroke="#fed7aa"/>
+    <text x="312" y="224" font-size="18" font-weight="700" fill="#065f46">Booking</text>
+    <text x="312" y="253" font-size="14" fill="#334155">Validate zone / deduplicate</text>
+    <text x="312" y="278" font-size="14" fill="#334155">Late insertion / cancellation</text>
+    <text x="312" y="327" font-size="13" font-weight="700" fill="#065f46">PENDING or CONFIRMED</text>
+    <text x="572" y="224" font-size="18" font-weight="700" fill="#1e40af">Planning</text>
+    <text x="572" y="253" font-size="14" fill="#334155">Claim / window / cluster</text>
+    <text x="572" y="278" font-size="14" fill="#334155">Capacity / SLA / detour</text>
+    <text x="572" y="327" font-size="13" font-weight="700" fill="#1e40af">PLANNED route + first offer</text>
+    <text x="832" y="224" font-size="18" font-weight="700" fill="#9a3412">Dispatch + execution</text>
+    <text x="832" y="253" font-size="14" fill="#334155">Reject / expire / next driver</text>
+    <text x="832" y="278" font-size="14" fill="#334155">Accept / ordered stops</text>
+    <text x="832" y="327" font-size="13" font-weight="700" fill="#9a3412">DISPATCHED to COMPLETED</text>
+    <path d="M530 293 H549" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+    <path d="M790 293 H809" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+    <path d="M672 390 V424" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="295" y="430" width="765" height="65" rx="10" fill="#0f172a"/>
+    <text x="316" y="456" font-size="17" font-weight="700" fill="#fff">PostgreSQL 16 + Flyway</text>
+    <text x="316" y="480" font-size="14" fill="#cbd5e1">Bookings, routes, offers, SLA issues · unique indexes · row locks · atomic commits</text>
+    <rect x="40" y="430" width="220" height="65" rx="10" fill="#e2e8f0"/>
+    <text x="57" y="456" font-size="16" font-weight="700" fill="#334155">Caffeine</text>
+    <text x="57" y="480" font-size="14" fill="#475569">Active zones only · 5 min TTL</text>
+    <text x="40" y="534" font-size="14" fill="#475569">Local distance estimator; no routing provider, message broker or driver notification transport.</text>
+  </g>
+</svg>

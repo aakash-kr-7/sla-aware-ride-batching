@@ -1,6 +1,6 @@
-# Feasible insertion and assignment ETA
+# Choosing a feasible route and validating its ETA
 
-The planner chooses the cheapest **feasible** insertion within each candidate trip, then compares incremental cost across trips. It no longer rejects a trip merely because its unconstrained cheapest insertion fails.
+The planner chooses the cheapest **feasible** insertion within each candidate trip, then compares incremental cost across trips. Cost ranks the alternatives that meet the hard constraints; it cannot override a rider's deadline.
 
 ## Search and bounds
 
@@ -10,7 +10,9 @@ The search streams candidates and retains one best route. Route construction, co
 
 This is greedy insertion, not a global route optimizer. It explores all insertion positions for the new rider, without reordering existing stops or revisiting earlier grouping decisions. Accepted assignments are not late-insertion candidates.
 
-## A case the previous search missed
+## Why checking one cheap insertion is insufficient
+
+![A cheaper route misses the pickup promise; another route works](assets/feasible-insertion.svg)
 
 The [regression](../src/test/java/com/ridebatching/batching/FeasibleInsertionRegressionTest.java) uses the real local estimator with circuity 1, speed 36 km/h and zero dwell. A starts at longitude 0 and drops at .02, with a 120-second pickup budget. B starts at .01 and drops at .019, with a 50-second budget; both latitudes are zero.
 

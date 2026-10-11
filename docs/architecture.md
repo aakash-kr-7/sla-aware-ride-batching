@@ -1,6 +1,8 @@
-# Architecture and Request Flow
+# Architecture and request flow
 
 One Spring Boot process serves HTTP requests and runs planning against PostgreSQL. Feature packages organize code, but services share repositories and entities; they are not independently enforced modules. There is no message broker or external routing service.
+
+For a first code review, follow `BookingService` → `BatchingService` → `BatchPlanner` → `DispatchService`. The diagrams below show where each operation acquires durable state. To exercise those paths first, use the [local setup](local-development.md) and [review guide](reviewer-guide.md).
 
 ```mermaid
 flowchart LR
@@ -36,7 +38,7 @@ Batching attempts an initial driver offer for each new trip in the same transact
 | `driver`, `dispatch` | Driver state, selection, offers and assignment |
 | `zone`, `geo`, `fleet` | Circular serviceability, distance/ETA estimates and non-persisted planning capacity |
 | `auth`, `escalation` | Account authentication/authorization and persisted SLA issue production/inspection |
-| `api`, `config`, `dev` | Shared HTTP concerns, framework wiring and opt-in local admin bootstrap |
+| `api`, `config`, `dev` | Shared HTTP concerns, framework wiring, opt-in local admin bootstrap and isolated local reference fixtures |
 
 HTTP DTOs normally live beside their feature. Controllers translate requests; services coordinate persistence; domain types guard local state. The escalation read API currently returns entities directly. Algorithm components can be tested without HTTP or a database.
 
@@ -98,4 +100,4 @@ Driver status remains `AVAILABLE` after assignment; `activeTripId` excludes it f
 - **Caffeine for zones only:** zone reads are frequent and the data changes less often than trip state. Freshness is TTL-bounded; mutable booking/assignment guarantees stay in PostgreSQL. See [cache decision](decisions/007-zone-caching.md).
 - **Explicit transaction boundaries:** duplicates need a usable transaction after a losing insert; see [dedup decision](decisions/0005-handle-booking-deduplication.md). Batching, cancellation and acceptance each coordinate their own changes.
 
-Java 17 is the build target; CI runs Java 21. No distributed infrastructure is needed for this submission. Production routing, driver identity/notification delivery and wider race coverage would be further work, not properties of the current architecture.
+Java 17 is the build target; CI runs Java 21. The separate `local-fixtures` profile provides disposable reference data through the same repositories; normal startup leaves business tables empty. Routing calibration, driver identity/notification delivery and wider operational validation remain future work.

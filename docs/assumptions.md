@@ -1,4 +1,4 @@
-# Assumptions and Assessment Approximations
+# Policies and modelling assumptions
 
 The case study supplies behavior and examples, not a complete operating policy. The following are implementation decisions unless explicitly marked as source examples. Configuration defaults come from [application.yml](../src/main/resources/application.yml); tests may use different values.
 
@@ -23,7 +23,7 @@ The limits above describe computed acceptance, not real-world pickup or road-ETA
 
 ## Environment and possible production work
 
-DB password and JWT signing secret are required environment values. Compose reads `.env`; Spring Boot needs exported values. The local profile only creates an admin when explicitly enabled with supplied credentials and the account table is empty; tests use separate signing material and disposable DBs. See [local development](local-development.md) for setup and [traceability](requirements-traceability.md) for requirement coverage.
+Normal startup requires a database password and JWT signing secret. Compose reads `.env`; Spring Boot needs exported values. The `local` profile can create only an explicitly enabled admin in an empty account table. The separate `local-fixtures` profile supplies disposable accounts, zones and drivers in its own database, uses a 20-minute urgent guard and ten-minute offers, and leaves route constraints unchanged. Tests use separate signing material and disposable PostgreSQL. See [local development](local-development.md) for the exact differences and [traceability](requirements-traceability.md) for requirement coverage.
 
 CONFIRMED is route association, not driver acceptance. Admin-only ordered pickup/dropoff simulation makes execution states reachable; first pickup starts the trip and final dropoff releases the driver. Expired solo promises stay pending with one persisted OPEN issue; cancellation resolves automatic booking issues. See [lifecycle policy](booking-lifecycle.md).
 

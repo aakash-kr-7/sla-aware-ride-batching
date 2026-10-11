@@ -1,6 +1,6 @@
-# Batching Algorithm Benchmark Results
+# Historical batching measurements
 
-Historical measurements recorded on 2026-10-10, before the repository hygiene pass, infeasible-solo fix and cheapest-feasible insertion search. They have not been remeasured for the current revision. Do not treat them as current latency guarantees.
+These synthetic measurements were recorded on 2026-10-10, before the current cheapest-feasible insertion search and missed-solo-promise policy. They have not been remeasured for this revision. Use them as historical context, not a current latency or capacity claim. The [algorithm analysis](../algorithm-analysis.md) describes the present search cost.
 
 ## Reproduce
 

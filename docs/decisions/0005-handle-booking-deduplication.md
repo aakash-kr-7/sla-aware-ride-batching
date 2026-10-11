@@ -2,6 +2,8 @@
 
 Status: Implemented for active bookings created through `BookingService`.
 
+The decision answers a concrete race: two callers can submit the same journey before either sees the other's write. [API identity](../api-design.md#booking-routes), [concurrency evidence](../failure-modes.md#transaction-ownership) and [the public duplicate check](../reviewer-guide.md#1-valid-requests-and-input-contracts--about-one-minute) show the resulting contract.
+
 ## Decision and rationale
 
 Use a stored deterministic key and PostgreSQL's partial unique index, not an existence check followed by insert. Two callers can both observe absence; only the database can arbitrate that race across processes. The key includes employee, normalized pickup/dropoff and UTC slot; normalization policy is owned by [assumptions](../assumptions.md).

@@ -1,8 +1,8 @@
-# Implemented Domain Model
+# Domain model and reachable states
 
-Declared enum states do not imply implemented execution flows. The following describes persisted data and reachable operations.
+Employee identity, booking intent, planned route and accepted assignment are separate records. This document maps those relationships and the operations that can actually advance them.
 
-Package responsibilities are in [architecture](architecture.md).
+Start with the state diagram if you are tracing a booking through Swagger. Package responsibilities are in [architecture](architecture.md); concrete HTTP actions are in [the API reference](api-design.md).
 
 ## Stored relationships
 

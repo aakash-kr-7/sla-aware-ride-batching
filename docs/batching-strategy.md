@@ -1,4 +1,8 @@
-# Batching and Route Insertion
+# From collection windows to feasible trips
+
+The pipeline separates three decisions: **when** to claim a request, **which requests** to compare, and **whether their route** is feasible. A geographic match passes only the prefilter; capacity, pickup SLA and detour still decide whether sharing is allowed.
+
+For a visual example, see the [four-plus-one workflow](reviewer-guide.md#2-four-plus-one-and-route-inspection--about-two-minutes). The rules below describe normal runtime; the [explicit local fixture profile](local-development.md#isolation-and-policy-differences) changes the urgency budget and offer lifetime for a short walkthrough.
 
 ## Runtime cycle
 

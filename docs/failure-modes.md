@@ -1,4 +1,6 @@
-# Concurrency, Failure and Operational Boundaries
+# Concurrency, failure and recovery
+
+The design keeps logical identity and assignment correctness in PostgreSQL. This guide explains the locks and constraints, what commits when an operation fails, and what an operator can inspect next. The [public review](reviewer-guide.md) shows state isolation; the integration tests below exercise contention deliberately.
 
 ## Transaction ownership
 
@@ -29,7 +31,7 @@ V11 makes dedup keys non-null and adds assignment foreign keys and deferred rout
 | Zone changed outside repository writes | Direct SQL/other-process changes can remain stale until expiry; slow read publication after a competing commit also remains a coherence limit. Repository-write eviction is deferred until commit. | See [cache decision](decisions/007-zone-caching.md) for eviction scope. No cross-instance invalidation; batching grouping revalidates using the same cached active zones. |
 | Invalid token / domain exception | Token failures produce non-leaking 401; global handler maps selected domain/validation faults. | JWT filter propagates downstream/database failures. Explicit domain and lock conflicts map to non-leaking 409, ownership denials to 403 and invalid arguments to 400. Missing JWT subject/expiration is invalid. See [API](api-design.md). |
 
-Flyway V8/V10 were corrected during repository hygiene for fresh-schema blockers (wrong employee FK target, existing index name). If an external DB already applied manually repaired versions, compare schema and checksums before upgrading; do not blindly run `flyway repair`. V11 is a forward migration: existing null keys, dangling assignment IDs or duplicate route rows must be repaired before upgrade. It fails rather than invent identities or delete historical data. V14 also rejects duplicate OPEN escalation references/reasons; reconcile inconsistent legacy issues explicitly. V15 adds nullable arrival estimates without inventing historical times. Other migration history is retained.
+Fresh databases apply all Flyway migrations without manual repair. Older installations with a manually amended V8/V10 must compare schema and checksums before upgrading; do not blindly run `flyway repair`. V11 requires existing null dedup keys, dangling assignment IDs and duplicate route rows to be repaired explicitly. V14 likewise rejects duplicate OPEN escalation references/reasons. These migrations preserve history rather than inventing identities or discarding inconsistent rows. V15 adds nullable arrival estimates without fabricating historical times.
 
 ## Health, metrics and logs
 

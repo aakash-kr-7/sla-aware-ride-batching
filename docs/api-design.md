@@ -1,8 +1,8 @@
-# Implemented HTTP API
+# HTTP API and authentication
 
 Swagger UI: `/swagger-ui/index.html`. Generated schema: `/v3/api-docs`.
 
-The opening description explains the sequence: login, Authorize with the returned token, list/create a booking, switch to an admin token for batching, then retrieve the booking to inspect status/trip association. Admin dispatch simulation lists routes and offer history, rejects the stored driver's offer to see the next driver, and accepts to commit assignment. Admin execution simulation then advances ordered pickup/dropoff stops through trip completion. Endpoint summaries and parameter descriptions identify required IDs and which calls change data. Example coordinates are illustrative and require configured business records; startup seeds none.
+The API has three surfaces: employee booking operations, authenticated admin planning/dispatch/execution, and public operational endpoints. This reference defines their contracts. For a first run, use the [local fixture setup](local-development.md) and [Swagger review guide](reviewer-guide.md); they supply usable identities and actual request examples.
 
 ## Authentication and access
 
@@ -14,7 +14,7 @@ Business requests use `Authorization: Bearer <JWT>`. Booking creation, listing a
 
 Roles are `EMPLOYEE`, `ADMIN`, `APPROVER`; no driver role exists. Booking methods permit ADMIN or matching employee identity, not an explicit EMPLOYEE-only role check. Any account role with the matching employee link can satisfy that condition. Cancellation also requires the supplied employee to own the booking, including for admins.
 
-`JWT_SECRET` is required. Default runtime creates no accounts. Local admin bootstrap requires the local profile, explicit enablement, supplied credentials and an empty account table.
+`JWT_SECRET` is required in normal configuration. Default runtime creates no accounts. Local admin bootstrap requires the `local` profile, explicit enablement, supplied credentials and an empty account table. The separate `local-fixtures` profile provides disposable employee/admin credentials in an isolated local database; its public signing material must remain local.
 
 ## Booking routes
 
@@ -86,4 +86,4 @@ A stored route that fails new assignment or cancellation capacity/detour checks 
 
 Login failure is plain text. Invalid arguments return 400 (`INVALID_REQUEST`); explicit domain transitions and optimistic/pessimistic lock conflicts return 409 (`STATE_CONFLICT`). Conflict responses do not echo database details. Unexpected internal failures remain server errors. The JWT filter handles only token/account authentication errors; it does not relabel downstream failures. See [failure modes](failure-modes.md).
 
-Zone/fleet CRUD and manual escalation resolution have no HTTP routes. Admin-only dispatch inspection and simulated offer responses are available; see [dispatch workflow](dispatch-workflow.md).
+Zone/fleet CRUD and manual escalation resolution have no HTTP routes. Provision reference data using the explicit [local fixture loader](local-development.md), then inspect and mutate rides through the normal authenticated API.

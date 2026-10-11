@@ -2,6 +2,8 @@
 
 Status: Implemented.
 
+The cache avoids repeating reference-data reads while keeping booking and assignment correctness in the database. The important compromise is freshness: local eviction covers repository writes, while external changes remain subject to expiry.
+
 `ServiceableZoneRepository.findByActiveTrue` caches active circular geofences in Caffeine. Each booking needs serviceability evaluation; zone changes are expected to be infrequent. PostgreSQL remains the source of truth.
 
 `CacheConfig` declares `activeZones`, maximum size 100, five-minute expiry after write and statistics. The no-argument lookup caches one list entry, not individual coordinates. Population is lazy.

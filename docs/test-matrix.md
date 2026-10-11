@@ -1,8 +1,26 @@
-# Test Evidence and Coverage Boundaries
+# Tests and the invariants they establish
 
 Unit tests establish algorithm/domain behavior for supplied inputs. Integration tests exercise real PostgreSQL 16 constraints and locks. Full-application tests share `AbstractPostgresIntegrationTest` with DB/cache cleanup; the account JPA slice uses its own container. Mocked HTTP identity in some controller tests is not proof of token authentication; security tests cover that separately.
 
 Run `./mvnw clean verify` (Windows: `./mvnw.cmd`) for the full suite and packaged build, or `./mvnw test` for tests alone. Docker is required. JMH in `src/benchmark/java` requires the benchmark profile and is performance evidence, not correctness proof.
+
+## Where to begin
+
+| Question | Read these tests |
+| --- | --- |
+| Is the collection pipeline connected? | `WindowedBatchingIntegrationTest`, `ConcurrentBatchingIntegrationTest` |
+| Does the planner find a costlier route that still works? | `FeasibleInsertionRegressionTest`, `BatchPlannerAcceptanceTest` |
+| Can late acceptance commit a broken promise? | `AssignmentTimingHttpIntegrationTest` |
+| Do rejection and cancellation work through HTTP? | `DispatchWorkflowHttpIntegrationTest`, `BookingLifecycleHttpIntegrationTest` |
+| Can a fresh clone load local data safely? | `LocalFixturesIntegrationTest`, `LocalFixturesIsolationTest` |
+
+Focused command, from the root (on Windows substitute `.\mvnw.cmd`):
+
+```sh
+./mvnw -Dtest=WindowedBatchingIntegrationTest,ConcurrentBatchingIntegrationTest,FeasibleInsertionRegressionTest,AssignmentTimingHttpIntegrationTest,DispatchWorkflowHttpIntegrationTest test
+```
+
+The [public review script](../scripts/local-review.py) is a separate real-HTTP smoke scenario against the running local fixture profile. It captures useful evidence; it does not replace forced-race or exact-boundary tests.
 
 ## Invariant evidence
 
@@ -10,7 +28,7 @@ T IDs connect to [requirements traceability](requirements-traceability.md). Each
 
 | Evidence / requirement | Tests | Assertions and unproven scope |
 | --- | --- | --- |
-| T01 / R01 Serviceability | [ServiceabilityServiceTest](../src/test/java/com/ridebatching/zone/ServiceabilityServiceTest.java), [ServiceableZoneIntegrationTest](../src/test/java/com/ridebatching/zone/ServiceableZoneIntegrationTest.java), [BookingControllerTest](../src/test/java/com/ridebatching/booking/api/BookingControllerTest.java) | Inside/outside, nearest overlapping center, lowest-ID tie; DB coordinate/radius bounds and HTTP rejection. No dropoff policy or batching-time revalidation. |
+| T01 / R01 Serviceability | [ServiceabilityServiceTest](../src/test/java/com/ridebatching/zone/ServiceabilityServiceTest.java), [ServiceableZoneIntegrationTest](../src/test/java/com/ridebatching/zone/ServiceableZoneIntegrationTest.java), [BookingControllerTest](../src/test/java/com/ridebatching/booking/api/BookingControllerTest.java), [WindowedBatchingIntegrationTest](../src/test/java/com/ridebatching/batching/WindowedBatchingIntegrationTest.java) | Inside/outside, nearest overlapping center, lowest-ID tie; DB coordinate/radius bounds, HTTP rejection and removed-zone exclusion at batch grouping. Pickup only; revalidation still uses the cached zone view. |
 | T02 / R02 Dedup | [DeduplicationKeyGeneratorTest](../src/test/java/com/ridebatching/booking/DeduplicationKeyGeneratorTest.java), [BookingPersistenceIntegrationTest](../src/test/java/com/ridebatching/booking/BookingPersistenceIntegrationTest.java), [BookingConcurrencyIntegrationTest](../src/test/java/com/ridebatching/booking/BookingConcurrencyIntegrationTest.java) | Key normalization/equivalence, unique constraint, ten synchronized submissions create one new row and return one ID. Booking mutation regressions cover repeated cancel/rebook history and atomic creation rollback. |
 | T03 / R03 Capacity | [CapacityConstraintTest](../src/test/java/com/ridebatching/batching/constraint/CapacityConstraintTest.java), [BatchPlannerAcceptanceTest](../src/test/java/com/ridebatching/batching/BatchPlannerAcceptanceTest.java) | Exact capacity passes, overflow fails; five simultaneous pickups split four plus one, while generous deadlines permit five bookings via seat turnover. Dispatch mutation regressions reject undersized drivers at selection and acceptance. |
 | T04 / R04 SLA | [PickupSlaConstraintTest](../src/test/java/com/ridebatching/batching/constraint/PickupSlaConstraintTest.java), BatchPlannerAcceptanceTest, [BookingSlaEscalationIntegrationTest](../src/test/java/com/ridebatching/batching/BookingSlaEscalationIntegrationTest.java), BookingLifecycleHttpIntegrationTest | [FeasibleInsertionRegressionTest](../src/test/java/com/ridebatching/batching/FeasibleInsertionRegressionTest.java) proves a costlier feasible insertion succeeds after the cheapest fails; [AssignmentTimingHttpIntegrationTest](../src/test/java/com/ridebatching/dispatch/api/AssignmentTimingHttpIntegrationTest.java) proves live-but-late acceptance rollback, exact equality and current driver approach. Equality passes, one second late fails, harmful sharing splits; expired solo stays pending with one OPEN issue across repeated cycles and concurrent PostgreSQL writers. Bounded expired recovery does not starve valid claims. Cancellation resolves automatic issues; resolved history is preserved. No actual arrival evidence. |
@@ -30,7 +48,9 @@ T IDs connect to [requirements traceability](requirements-traceability.md). Each
 
 [RoutePlannerInvariantTest](../src/test/java/com/ridebatching/batching/RoutePlannerInvariantTest.java) repeats reproducible seeded inputs 100 times and asserts route order, uniqueness, complete pickup/drop pairing, occupancy, pickup SLA and independently reconstructed relative/absolute detour. It is finite sampling, not exhaustive proof.
 
-`DatabaseIntegrationTest`, `RideBatchingApplicationTests` and repository integration tests exercise fresh Flyway migrations/JPA validation. `LocalDevBootstrapTest` checks local-profile isolation, default disablement, required credentials and encoded admin creation. These are setup/schema checks, not proof of complete business coverage.
+`DatabaseIntegrationTest`, `RideBatchingApplicationTests` and repository integration tests exercise fresh Flyway migrations/JPA validation. `LocalDevBootstrapTest` checks local-profile isolation, default disablement, required credentials and encoded admin creation.
+
+[LocalFixturesIntegrationTest](../src/test/java/com/ridebatching/dev/LocalFixturesIntegrationTest.java) checks usable account links/hashes, zones/driver eligibility data, restart preservation, refusal of foreign/incomplete data or the wrong database, and rollback/retry after a partial seed failure. [LocalFixturesIsolationTest](../src/test/java/com/ridebatching/dev/LocalFixturesIsolationTest.java) proves normal and local-admin profiles do not activate business fixtures. These are setup boundaries; the [fresh-clone sequence](local-development.md) exercises the running application independently of test data.
 
 Regression classes cover transaction rollback, competing driver assignment and concurrent booking/trip mutations; the requirement rows above identify their coverage boundaries.
 

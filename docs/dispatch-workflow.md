@@ -1,6 +1,8 @@
 # Trip dispatch and offer responses
 
-Batch formation now calls dispatch for each newly planned trip. An initial offer commits with the route and confirmed bookings. Rejection advances to another eligible driver immediately; acceptance commits the offer, trip assignment and driver's active-trip link atomically. These are operations inside the existing Spring Boot application, with no messaging infrastructure.
+Every newly planned trip attempts an initial driver offer in the same transaction as its route and booking confirmations. Rejection advances to another eligible driver; acceptance commits the offer, trip assignment and driver's active-trip link atomically. All steps run inside the existing application.
+
+The [public review workflow](reviewer-guide.md#4-reject-select-another-driver-accept--about-two-minutes) exercises this through authenticated HTTP. This document defines identity, deadlines, finite retries and outcomes when the happy path stops.
 
 ```mermaid
 flowchart TD
@@ -24,7 +26,7 @@ flowchart TD
 
 The project has employee/admin/approver accounts, without a driver authentication model. Accordingly, all dispatch HTTP operations are **ADMIN-only simulations of the stored driver's response**. The authenticated admin is the actor; an `offerId` identifies the previously selected driver. No arbitrary driver identity, pickup location or employee header comes from the request. These controls do not claim to deliver a notification or prove a real driver received it.
 
-After obtaining an admin JWT with `POST /auth/login`, use these requests in Swagger's **Admin (Dispatch simulation)** group or an HTTP client. All POST operations below have no body. Bookings, employees, drivers and active zones must already exist; startup does not provision business data.
+After obtaining an admin JWT with `POST /auth/login`, use these requests in Swagger's **Admin (Dispatch simulation)** group or an HTTP client. All POST operations below have no body. The [explicit local fixture setup](local-development.md) supplies employees, drivers, zones and accounts; normal startup does not provision them. Create bookings before triggering batching.
 
 PowerShell, with `$adminToken`, `$tripId` and `$offerId` filled from real responses:
 
