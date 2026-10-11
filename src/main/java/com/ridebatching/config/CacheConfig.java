@@ -22,6 +22,6 @@ public class CacheConfig {
                 .maximumSize(100)
                 .expireAfterWrite(5, TimeUnit.MINUTES)
                 .recordStats()); // Enables metrics if Micrometer is configured to bind to it
-        return cacheManager;
+        return new org.springframework.cache.transaction.TransactionAwareCacheManagerProxy(cacheManager);
     }
 }

@@ -19,6 +19,58 @@ class ServiceabilityCacheIntegrationTest extends AbstractPostgresIntegrationTest
 
     @Autowired
     private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+    @Autowired private org.springframework.transaction.support.TransactionTemplate transaction;
+
+    @Test
+    void saveAndFlushMustEvictCachedEmptyList() {
+        GeoPoint point = new GeoPoint(10, 10);
+        assertThat(serviceabilityService.findZoneFor(point)).isEmpty();
+        zoneRepository.saveAndFlush(new ServiceableZone("new", 10, 10, 1000, true));
+        assertThat(serviceabilityService.findZoneFor(point)).isPresent();
+    }
+
+    @Test
+    void deleteByIdMustEvictPreviouslyServiceableZone() {
+        GeoPoint point = new GeoPoint(10, 10);
+        ServiceableZone zone = zoneRepository.saveAndFlush(new ServiceableZone("removed", 10, 10, 1000, true));
+        assertThat(serviceabilityService.findZoneFor(point)).isPresent();
+        zoneRepository.deleteById(zone.getId());
+        assertThat(serviceabilityService.findZoneFor(point)).isEmpty();
+    }
+
+    @Test
+    void competingReadBeforeDeleteCommitCannotLeaveStaleServiceability() throws Exception {
+        GeoPoint point = new GeoPoint(10, 10);
+        ServiceableZone zone = zoneRepository.saveAndFlush(new ServiceableZone("removed", 10, 10, 1000, true));
+        assertThat(serviceabilityService.findZoneFor(point)).isPresent();
+        var executor = java.util.concurrent.Executors.newSingleThreadExecutor();
+        try {
+            transaction.executeWithoutResult(status -> {
+                zoneRepository.delete(zone);
+                zoneRepository.flush();
+                try {
+                    assertThat(executor.submit(() -> serviceabilityService.findZoneFor(point))
+                            .get(10, java.util.concurrent.TimeUnit.SECONDS)).isPresent();
+                } catch (Exception failure) { throw new AssertionError(failure); }
+            });
+            assertThat(serviceabilityService.findZoneFor(point)).isEmpty();
+        } finally {
+            executor.shutdownNow();
+            assertThat(executor.awaitTermination(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+        }
+    }
+
+    @Test
+    void rolledBackZoneReadCannotPublishUncommittedZones() {
+        GeoPoint point = new GeoPoint(10, 10);
+        transaction.executeWithoutResult(status -> {
+            zoneRepository.saveAndFlush(new ServiceableZone("rolled back", 10, 10, 1000, true));
+            assertThat(serviceabilityService.findZoneFor(point)).isPresent();
+            status.setRollbackOnly();
+        });
+        assertThat(zoneRepository.count()).isZero();
+        assertThat(serviceabilityService.findZoneFor(point)).isEmpty();
+    }
 
     @Test
     void testCacheHitAndEviction() {
