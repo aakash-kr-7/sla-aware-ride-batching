@@ -24,18 +24,24 @@ public class DriverOffer {
 
     private Instant createdAt;
     private Instant updatedAt;
+    private Instant expiresAt;
 
     protected DriverOffer() {
         // JPA
     }
 
     public DriverOffer(UUID id, UUID driverId, UUID tripId) {
+        this(id, driverId, tripId, Instant.now(), java.time.Duration.ofMinutes(2));
+    }
+
+    public DriverOffer(UUID id, UUID driverId, UUID tripId, Instant now, java.time.Duration lifetime) {
         this.id = id;
         this.driverId = driverId;
         this.tripId = tripId;
         this.status = DriverOfferStatus.OFFERED;
-        this.createdAt = Instant.now();
+        this.createdAt = now;
         this.updatedAt = this.createdAt;
+        this.expiresAt = now.plus(lifetime);
     }
 
     public UUID getId() { return id; }
@@ -44,8 +50,14 @@ public class DriverOffer {
     public DriverOfferStatus getStatus() { return status; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
+    public Instant getExpiresAt() { return expiresAt; }
+    public boolean hasExpired(Instant now) { return !now.isBefore(expiresAt); }
 
     public void accept() {
+        accept(Instant.now());
+    }
+
+    public void accept(Instant now) {
         if (this.status == DriverOfferStatus.ACCEPTED) {
             return;
         }
@@ -53,10 +65,14 @@ public class DriverOffer {
             throw new com.ridebatching.api.DomainConflictException("Only OFFERED offers can be accepted");
         }
         this.status = DriverOfferStatus.ACCEPTED;
-        this.updatedAt = Instant.now();
+        this.updatedAt = now;
     }
 
     public void reject() {
+        reject(Instant.now());
+    }
+
+    public void reject(Instant now) {
         if (this.status == DriverOfferStatus.REJECTED) {
             return;
         }
@@ -64,14 +80,18 @@ public class DriverOffer {
             throw new com.ridebatching.api.DomainConflictException("Only OFFERED offers can be rejected");
         }
         this.status = DriverOfferStatus.REJECTED;
-        this.updatedAt = Instant.now();
+        this.updatedAt = now;
     }
 
     public void expire() {
+        expire(Instant.now());
+    }
+
+    public void expire(Instant now) {
         if (this.status != DriverOfferStatus.OFFERED) {
             throw new com.ridebatching.api.DomainConflictException("Only OFFERED offers can expire");
         }
         this.status = DriverOfferStatus.EXPIRED;
-        this.updatedAt = Instant.now();
+        this.updatedAt = now;
     }
 }

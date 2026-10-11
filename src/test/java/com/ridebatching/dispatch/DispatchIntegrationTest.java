@@ -99,11 +99,8 @@ class DispatchIntegrationTest extends AbstractPostgresIntegrationTest {
         assertThat(secondOffer).isEmpty(); // Near driver in cool-off, Far driver offline -> nobody available
     }
 
-    // Wait, testing "rejected driver becomes eligible after cool-off" is tricky 
-    // with real time unless we inject a Clock or manipulate the DB.
-    // Let's modify the DB record directly.
     @Test
-    void rejectedDriverBecomesEligibleAfterCoolOff() {
+    void elapsedCoolOffDoesNotRestartTheSameTripOfferRound() {
         Optional<DriverOffer> firstOffer = dispatchService.dispatchTrip(tripId, pickupLocation);
         dispatchService.rejectOffer(firstOffer.get().getId());
 
@@ -116,8 +113,9 @@ class DispatchIntegrationTest extends AbstractPostgresIntegrationTest {
         jdbcTemplate.update("UPDATE driver_offers SET updated_at = updated_at - interval '10 minutes' WHERE id = ?", offer.getId());
 
         Optional<DriverOffer> secondOffer = dispatchService.dispatchTrip(tripId, pickupLocation);
-        assertThat(secondOffer).isPresent();
-        assertThat(secondOffer.get().getDriverId()).isEqualTo(nearDriver.getId()); // Available again!
+        assertThat(secondOffer).isEmpty();
+        assertThat(offerRepository.findByTripId(tripId)).extracting(DriverOffer::getDriverId)
+                .doesNotHaveDuplicates();
     }
 
     @Test
@@ -180,10 +178,10 @@ class DispatchIntegrationTest extends AbstractPostgresIntegrationTest {
         DriverOffer finalOffer1 = offerRepository.findById(offer1.getId()).orElseThrow();
         DriverOffer finalOffer2 = offerRepository.findById(offer2.getId()).orElseThrow();
 
-        // One offer should be ACCEPTED, the other OFFERED (since acceptance failed)
+        // Acceptance closes other outstanding offers, including records from older versions.
         assertThat(
-                (finalOffer1.getStatus() == DriverOfferStatus.ACCEPTED && finalOffer2.getStatus() == DriverOfferStatus.OFFERED) ||
-                (finalOffer2.getStatus() == DriverOfferStatus.ACCEPTED && finalOffer1.getStatus() == DriverOfferStatus.OFFERED)
+                (finalOffer1.getStatus() == DriverOfferStatus.ACCEPTED && finalOffer2.getStatus() == DriverOfferStatus.EXPIRED) ||
+                (finalOffer2.getStatus() == DriverOfferStatus.ACCEPTED && finalOffer1.getStatus() == DriverOfferStatus.EXPIRED)
         ).isTrue();
     }
 }

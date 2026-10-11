@@ -79,7 +79,7 @@ class DispatchMutationRegressionIntegrationTest extends AbstractPostgresIntegrat
         Driver driver = driver(4, 0);
         Trip trip = trip(1);
         DriverOffer offer = offer(driver, trip);
-        List<Throwable> outcomes = competeWhileRowLocked("driver_offers", offer.getId(),
+        List<Throwable> outcomes = competeWhileRowLocked("trips", trip.getId(),
                 () -> service.acceptOffer(offer.getId()), () -> service.rejectOffer(offer.getId()));
         assertOneConflict(outcomes);
         DriverOffer current = offers.findById(offer.getId()).orElseThrow();

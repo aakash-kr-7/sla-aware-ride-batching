@@ -61,5 +61,7 @@ app:
     stop-dwell-time-seconds: 120
 
 dispatch:
+  offer-lifetime: PT2M
+  max-offers-per-trip: 3
   cool-off:
     duration: PT5M

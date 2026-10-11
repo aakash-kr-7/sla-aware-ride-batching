@@ -16,6 +16,13 @@ import org.springframework.data.repository.query.Param;
 public interface DriverOfferRepository extends JpaRepository<DriverOffer, UUID> {
     
     List<DriverOffer> findByTripId(UUID tripId);
+
+    @Query(value = """
+            SELECT DISTINCT o.trip_id FROM driver_offers o JOIN trips t ON t.id=o.trip_id
+            WHERE o.status='OFFERED' AND o.expires_at <= :now AND t.status='PLANNED'
+            ORDER BY o.trip_id LIMIT :cycleLimit
+            """, nativeQuery = true)
+    List<UUID> findTripsWithExpiredOffers(@Param("now") Instant now, @Param("cycleLimit") int cycleLimit);
     
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT o FROM DriverOffer o WHERE o.id = :id")

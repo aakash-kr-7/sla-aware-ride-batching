@@ -14,6 +14,18 @@ import java.time.Instant;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(com.ridebatching.dispatch.OfferExpiredException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ApiErrorResponse handleExpiredOffer(RuntimeException ex, HttpServletRequest request) {
+        return new ApiErrorResponse("OFFER_EXPIRED", ex.getMessage(), Instant.now(), request.getRequestURI());
+    }
+
+    @ExceptionHandler(com.ridebatching.dispatch.DispatchNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public ApiErrorResponse handleDispatchNotFound(RuntimeException ex, HttpServletRequest request) {
+        return new ApiErrorResponse("DISPATCH_NOT_FOUND", ex.getMessage(), Instant.now(), request.getRequestURI());
+    }
+
     @ExceptionHandler({DomainConflictException.class,
             org.springframework.dao.OptimisticLockingFailureException.class,
             org.springframework.dao.PessimisticLockingFailureException.class})
