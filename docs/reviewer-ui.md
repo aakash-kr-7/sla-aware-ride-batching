@@ -1,74 +1,57 @@
-# Interactive Reviewer Console
+# Browser demo
 
-The web interface served at `/` provides an interactive review console for the SLA-aware ride batching backend. It exercises the complete end-to-end lifecycle—from booking ingestion to constraint-checked pooling, driver offer state machines, and cancellation replanning—against the live Spring Boot application and PostgreSQL database.
+Open `/` to create ride requests, inspect shared routes and follow driver assignment. The page calls the existing authenticated APIs. Spring Boot serves its HTML, CSS and JavaScript; no frontend server or build is needed.
 
-Spring Boot serves the static HTML, CSS, and JavaScript directly from `src/main/resources/static/`. There are zero frontend frameworks, build steps, Node/npm dependencies, or external CDNs. All routing, optimization algorithms, and transactional state machines reside exclusively on the backend.
+Start the [local fixture setup](local-development.md), then select **Use local credentials** and **Connect**. The page checks health/readiness and authenticates the admin and nine employees. Tokens stay in tab memory. Opening the page creates no bookings.
 
----
+## Guided example
 
-## Getting Started
+Use a fresh disposable database. After each action, the main button takes you to the next stage. Completed stages remain available in the navigation; later stages are disabled until their prerequisites succeed.
 
-1. Start the local database and launch the application with the fixtures profile:
-   ```bash
-   docker compose -f compose.local.yml up -d --wait
-   .\mvnw.cmd spring-boot:run '-Dspring-boot.run.profiles=local-fixtures'
-   ```
-2. Open **[http://127.0.0.1:8080/](http://127.0.0.1:8080/)**.
-3. Click **Auto-fill Test Credentials**, then **Connect & Sign In**.
+| Stage | What to inspect |
+| --- | --- |
+| Connect | Service health and separate account logins |
+| Create requests | Five distinct pending bookings with server-assigned deadlines |
+| Check a retry | Same booking ID on retry; an outside-zone pickup returns 422 `UNSERVICEABLE_ZONE` |
+| Plan trips | Four riders share a route; one takes a separate trip. Compare occupancy and pickup times |
+| Explain the split | Hypothetical insertions fail either capacity or pickup SLA; the saved route is unchanged |
+| Offer & assign | Reject the first offer, then accept its replacement; the trip becomes `DISPATCHED` |
+| Cancel & replan | One shared rider cancels; the affected route has three riders and the other trip is unchanged |
+| Read metrics | Counters recorded by the application process |
 
-The console verifies service health and readiness endpoints (`/actuator/health/readiness`), then authenticates the admin account and five test employee accounts (`/auth/login`). JWT tokens are stored solely in browser memory and passed via `Authorization: Bearer <token>` on subsequent requests.
+Keep the example within about ten minutes. Pickup deadlines still apply. Near a UTC collection boundary, the initial burst waits briefly to stay in one window; a duplicate retry in a later window can legitimately create a new booking.
 
-Opening the page performs no database mutations. Business endpoints strictly enforce authentication, role checks, and employee resource ownership.
+## Your scenario
 
----
+Choose one to nine riders. Each row selects an employee and accepts pickup/dropoff latitude and longitude. The default rows use the same central pickup and long southbound journey.
 
-## 8-Stage Sequential Verification Flow
+**Send requests** submits the rows concurrently. Each row shows its actual result or error as the response arrives. **Run batching** then plans eligible pending bookings and refreshes their statuses. A request can already be confirmed through late insertion when it is created. The cycle's pending count covers only its claimed rows, not the entire database queue.
 
-The console walks through the system lifecycle in eight deliberate steps:
+On a fresh database, nine default requests normally form **4 + 4 + 1**. This is an expected example, not a client-side allocation rule. Change coordinates to explore serviceability, direction grouping, seat turnover and detour/SLA checks. An invalid row does not hide other successful responses. Each employee appears once per burst; sending the same row later lets you try deduplication.
 
-| Stage | Action Button | Backend Mechanics & Invariants Demonstrated |
-| :--- | :--- | :--- |
-| **01. Health & Auth** | Connect & Sign In | Verifies Actuator UP status and logs in 6 accounts to acquire separate JWTs. |
-| **02. Ingest Bookings** | Submit 5 Bookings | Ingests 5 bookings for 5 distinct employees. Server assigns 15-minute UTC collection windows and 20-minute pickup SLA deadlines. |
-| **03. Validation & Idempotency** | Verify Deduplication & Geofence | Re-submits Employee 1's booking to demonstrate idempotency keys (returns existing ID with no duplicate row). Submits coordinates outside Bangalore zones to verify the `422 UNSERVICEABLE_ZONE` domain error. |
-| **04. Batch Optimization** | Run Batching Engine | Executes the batching solver. With 5 riders traveling simultaneously in a 4-seat capacity setup, the engine partitions requests into a 4-rider pooled trip and a 1-rider independent trip. |
-| **05. Constraint Diagnostics** | Evaluate Insertion Constraints | Evaluates why Rider 5 cannot join Trip 1. The API explores stop insertion permutations and returns exact constraint violations: permutations either breach 4-seat capacity or delay pickup past the 20-minute SLA deadline. |
-| **06. Driver State Machine** | Reject Initial Offer → Accept Fallback Offer | Phase 1 rejects Driver 101's offer, triggering automated dispatch fallback to backup Driver 102. Phase 2 accepts the offer, locking the assignment and transitioning trip status to `DISPATCHED`. |
-| **07. Dynamic Replanning** | Cancel Rider 1 Booking | Rider 1 cancels their booking via `DELETE /api/v1/bookings/{id}`. The pooled trip dynamically replans (dropping from 4 to 3 riders and 8 to 6 stops), while the independent solo trip remains completely untouched. |
-| **08. System Telemetry** | Fetch Operational Metrics | Reads live Micrometer counters from Actuator (`/actuator/metrics/*`), verifying recorded hits for deduplication, trips formed, rejections, acceptances, and replans. |
+The fixture fleet has two available four-seat drivers, one available two-seat driver and one offline driver at startup. There is no fleet-editing API. Offers are provisional: two routes may initially offer the same driver. For the default nine-rider example, accept the two four-rider routes first, then the solo route so the larger cabs serve the groups that need them. Use **Find next driver** on a competing trip to consider an untried eligible driver. The backend owns availability, seat checks and the attempt limit.
 
----
+[This browser capture](assets/nine-rider-demo.png) was taken on 12 October 2026 after nine default requests formed three trips and all three drivers accepted. It shows the saved state before cancellation and execution; IDs and timestamps vary on another run.
 
-## Verification Controls & Evidence
+Custom mutations end the controlled example's assumptions. You can continue with the trip controls or reset the disposable database for another guided run. Saved rides found on login open directly in this mode.
 
-### 1. Saved Trips & Routes
-Inspects real database state from PostgreSQL:
-- **Vehicle Occupancy Bar:** Visual representation of vehicle capacity (4 slots) vs. peak concurrent passengers.
-- **Ordered Stop Sequences:** Table of sequenced PICKUP and DROPOFF stops, including estimated arrival times, promised SLA deadlines, and on-time status checks.
-- **Driver Offer History:** Complete log of driver IDs, dispatch outcomes, and offer expiry timestamps.
+## Trip controls
 
-### 2. Live API Inspector
-The traffic log captures every HTTP request sent to the backend:
-- Displays method (`GET`, `POST`, `DELETE`), endpoint, HTTP response code, and latency in milliseconds.
-- Expand any row to inspect full request payloads, headers (with employee identities), and formatted response bodies.
-- Click **Export JSON Trace** to download all recorded HTTP traces as a `.json` file for audit or review.
+Each trip shows grouped riders, peak occupancy, pickup deadline checks and dispatch state. Expand **Route & pickup times** for the ordered stops or **Driver offers** for history and expiry times. Full IDs are in the response JSON.
 
-### 3. Architecture & Optimization Pipeline
-A collapsible overview illustrates how the backend processes requests:
-1. **Window Collection:** Groups pending bookings into 15-minute UTC collection windows `[t_start, t_end)`.
-2. **Spatial Partitioning:** Prunes search space by serviceable pickup zones and directional headings.
-3. **Feasible Insertion Search:** Evaluates stop order permutations against capacity (4 seats), pickup deadlines (≤ 20 min), and maximum detour limits.
-4. **Transactional Commit:** Locks database rows (`SELECT FOR UPDATE`) to prevent race conditions during driver offer dispatch and assignment.
+- A planned trip with an active offer provides **Accept offer** and **Reject offer**. Acceptance can fail if the driver is now busy or the approach would miss a deadline. Refresh and find the next driver where the attempt budget permits.
+- A planned trip without an offer provides **Find next driver** while attempts remain. Exhaustion stays visible in the dispatch outcome.
+- An assigned trip provides **Record next stop**. The page reads booking status and submits only the next unfinished pickup/dropoff. The final dropoff completes the trip and releases its driver.
+- **Cancel a rider** appears only before execution. Select the booking and cancel; the backend updates the affected route. Cancellation closes for the entire trip at first pickup.
 
-### 4. Manual Operations Sandbox
-Allows executing ad-hoc backend mutations using the active session:
-- Create custom employee bookings with custom latitude/longitude coordinates.
-- Advance dispatch attempts or simulate driver accept/reject actions.
-- Record sequential stop arrivals (PICKUP / DROPOFF) to simulate trip execution.
-- Inspect open SLA escalations for unassigned requests.
+These driver-response and execution actions are admin simulations. The page does not measure physical cab movement or actual arrival times.
 
----
+## Request log and reset
 
-## Swagger UI Link
+The latest five calls stay visible; earlier calls are collapsed. Expand a row for the request, response, status, duration and employee header metadata. **Download JSON** exports up to 100 retained calls with login passwords and tokens redacted. Usernames, booking IDs and coordinates remain in that local export.
 
-The top-right header button **Try it yourself in Swagger ↗** opens `/swagger-ui/index.html` in a separate tab. Reviewers can explore the full OpenAPI specification, test arbitrary payloads, and verify endpoints independently.
+Mutations are not retried automatically. A timeout can occur after a commit: refresh and inspect the log before resubmitting. The page does not poll continuously; actions and **Refresh** fetch current server state. Saved pickup estimates are not recalculated by GET, and metric counters are process totals.
+
+**Sign out** clears tab state and tokens, leaving database state intact. For a fresh run, follow [the disposable reset commands](local-development.md#stop-or-reset-the-disposable-setup). Local fixtures use a 20-minute urgency guard and ten-minute offers; normal values are five and two minutes. The 15-minute window, 20-minute pickup SLA and route constraints are unchanged.
+
+The top-right **API reference** opens Swagger. Log in and authorize separately there for arbitrary IDs, schemas and all operations.

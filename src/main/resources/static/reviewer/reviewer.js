@@ -1,6 +1,6 @@
 "use strict";
 
-// Stateless client for inspecting backend ride-batching algorithms and state machines.
+// Planning and authorization stay on the server; this client displays its responses.
 const $ = (id) => document.getElementById(id);
 const employeeId = (n) => `00000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
 const journeyBody = {
@@ -10,6 +10,7 @@ const journeyBody = {
 
 const state = {
   step: 0,
+  mode: "guided",
   busy: false,
   admin: null,
   riders: [],
@@ -28,68 +29,68 @@ const state = {
 
 const stages = [
   [
-    "Health & Auth",
-    "1. Health Check & Account Authentication",
-    "Verify service readiness via Spring Boot Actuator, then sign in the admin and 5 test employee accounts to acquire individual JWT tokens. Employee tokens create individual bookings, while the admin token triggers batching and dispatch simulation.",
+    "Connect",
+    "Connect to the backend",
+    "Sign in with the disposable local accounts.",
     "GET /actuator/health/readiness · POST /auth/login",
-    "Connect & Sign In",
-    "Stateless review harness: all business rules, authentication, and database state remain strictly on the backend."
+    "Connect",
+    "Uses the local-fixtures accounts. Tokens stay in this browser tab; the server checks permissions on every request."
   ],
   [
-    "Ingest Bookings",
-    "2. Ingest 5 Co-Directional Ride Requests",
-    "Create 5 distinct bookings with identical pickup and dropoff coordinates across 5 authenticated employees. Because all riders travel the full route simultaneously, vehicle capacity (4 seats) forces a 4 + 1 trip split.",
+    "Create requests",
+    "Five riders, the same journey",
+    "Five employees request the same pickup and long journey.",
     "POST /api/v1/bookings × 5",
-    "Submit 5 Bookings",
-    "Each booking is assigned a 15-minute UTC collection window, calculated pickup SLA deadline, and PENDING status."
+    "Create five requests",
+    "The backend assigns the collection window and pickup deadline. Four seats limit simultaneous passengers, not total bookings on every route."
   ],
   [
-    "Validation & Idempotency",
-    "3. Idempotency & Geofence Validation",
-    "Re-submit Employee 1's booking to demonstrate database deduplication (returns original booking ID without inserting duplicates). Next, submit a pickup outside active service zones to verify the 422 UNSERVICEABLE_ZONE domain error.",
+    "Check a retry",
+    "One retry, still one booking",
+    "Repeat the first booking, then send a pickup outside the service zone.",
     "POST /api/v1/bookings (duplicate + out-of-zone)",
-    "Verify Deduplication & Geofence",
-    "Deduplication keys prevent duplicate bookings from client retries; zone validation enforces geofencing rules."
+    "Try a retry & invalid pickup",
+    "Logical identity includes employee, pickup, destination and UTC slot. Repeating the journey in a later slot is a new request."
   ],
   [
-    "Batch Optimization",
-    "4. Execute Batching & Inspect Feasible Routes",
-    "Trigger the batching engine to group pending requests into optimized trips. Inspect the resulting routes, ordered stop sequences, vehicle occupancy (4/4 vs 1/4), and pickup ETA promises against deadlines.",
+    "Plan trips",
+    "See who shares a cab",
+    "Run the planner, then compare the two trips below.",
     "POST /api/admin/batching/trigger",
-    "Run Batching Engine",
-    "The solver strictly enforces 3 hard constraints: 4-seat capacity, 20-minute pickup SLA deadlines, and maximum detour limits."
+    "Run batching",
+    "Candidates share a window, pickup zone and direction. Each proposed route must also pass capacity, SLA and detour checks."
   ],
   [
-    "Constraint Diagnostics",
-    "5. Why Rider 5 Was Split (Constraint Violations)",
-    "Evaluate candidate insertion of the solo rider into the 4-passenger trip. The API evaluates stop permutations and reports exact constraint violations: some permutations breach 4-seat capacity, while reordered permutations violate pickup SLA.",
+    "Explain the split",
+    "Could the fifth rider fit?",
+    "Ask the backend whether the solo rider could join the shared trip.",
     "GET /api/admin/dispatch/trips/{id}?candidateBookingId=…",
-    "Evaluate Insertion Constraints",
-    "Diagnostic evaluation proves why the solver rejected combining all 5 riders into a single vehicle."
+    "Check insertion alternatives",
+    "A fresh, read-only route check, not historical decision replay. Existing stop order is preserved; each example reports its first failing constraint."
   ],
   [
-    "Driver State Machine",
-    "6. Driver Offer, Rejection & Acceptance",
-    "Simulate the driver dispatch lifecycle: reject the initial driver offer to observe automated fallback to a backup driver, then accept the offer to transition the trip from PLANNED to DISPATCHED under database row locks.",
+    "Offer & assign",
+    "Try the next driver",
+    "Reject the first offer, then accept the next driver.",
     "POST /api/admin/dispatch/offers/{id}/reject",
-    "Reject Initial Driver Offer",
-    "Driver assignment requires explicit acceptance with atomic concurrency locks to prevent double-booking."
+    "Reject first offer",
+    "Admin simulation uses the driver stored on the offer. Acceptance rechecks current approach time and constraints under row locks."
   ],
   [
-    "Dynamic Replanning",
-    "7. Cancellation Isolation & Route Replanning",
-    "Cancel one passenger booking using their employee token. The affected pooled trip immediately replans (dropping from 4 to 3 riders and 8 to 6 stops), while the independent solo trip remains completely untouched.",
+    "Cancel & replan",
+    "Change just one trip",
+    "Cancel one shared rider and compare the two routes.",
     "DELETE /api/v1/bookings/{id}",
-    "Cancel Rider 1 Booking",
-    "Replanning recalculates stop order and arrival ETAs dynamically while preserving independent trips."
+    "Cancel one booking",
+    "Cancellation removes that rider’s stops and refreshes timing while preserving remaining stop order. It closes for the whole trip at first pickup."
   ],
   [
-    "System Telemetry",
-    "8. Micrometer Metrics & Telemetry",
-    "Inspect cumulative operational metrics recorded by the running application, including deduplication hits, trips formed, driver rejections, acceptances, and cancellation replans.",
+    "Read metrics",
+    "See the recorded operations",
+    "Read the counters recorded during this example.",
     "GET /actuator/metrics/{name}",
-    "Fetch Operational Metrics",
-    "Live Micrometer telemetry exposed directly from Spring Boot Actuator."
+    "Read counters",
+    "Counters accumulate across the running process. They are not per-visitor totals or a benchmark."
   ]
 ];
 
@@ -133,19 +134,30 @@ function renderStage() {
   $("stage-endpoint").textContent = stage[3];
 
   if (state.step === 5 && state.dispatchPhase === 1) {
-    $("stage-action").textContent = "Accept Next Driver’s Offer";
+    $("stage-action").textContent = "Accept next driver’s offer";
     $("stage-endpoint").textContent = "POST /api/admin/dispatch/offers/{id}/accept";
   } else {
     $("stage-action").textContent = stage[4];
   }
 
-  $("stage-action").disabled = state.busy || !stageAllowed() || state.done.has(state.step);
-  $("login-fields").hidden = state.step !== 0;
+  if (state.done.has(state.step)) {
+    $("stage-action").textContent = state.step < stages.length - 1
+      ? `Next: ${stages[state.step + 1][0]}` : "Walkthrough complete";
+  }
+  $("stage-action").disabled = state.busy || (state.done.has(state.step)
+    ? state.step === stages.length - 1 : !stageAllowed());
+  $("login-fields").hidden = state.step !== 0 || state.done.has(0);
   $("stage-state").textContent = state.busy
     ? "Executing request…"
     : state.done.has(state.step)
-      ? "Verified against backend"
-      : "Ready to execute";
+      ? "Done"
+      : state.step > 0 && !state.done.has(state.step - 1)
+        ? "Finish the previous step first"
+        : state.step > 0 && !state.fresh
+          ? "Use Your scenario with existing data"
+          : state.attempted.has(actionKey())
+            ? "Check the request log; use Your scenario to continue"
+            : "Ready";
 
   $("stage-result").textContent = state.results[state.step] || "";
 
@@ -158,7 +170,7 @@ function renderStage() {
       element("span", "step-number", state.done.has(i) ? "✓" : String(i + 1).padStart(2, "0")),
       element("span", "", entry[0])
     );
-    button.disabled = state.busy;
+    button.disabled = state.busy || (i > 0 && !state.done.has(i - 1));
     button.addEventListener("click", () => {
       state.step = i;
       renderStage();
@@ -172,8 +184,21 @@ function renderStage() {
   $("fill-fixtures").disabled = state.busy;
   $("username").disabled = state.busy || Boolean(state.admin);
   $("password").disabled = state.busy || Boolean(state.admin);
-  document.querySelectorAll("[data-extra]").forEach((button) => {
-    button.disabled = state.busy || !state.admin;
+  const connected = state.done.has(0);
+  $("custom-mode").disabled = state.busy || !connected;
+  $("guided-mode").disabled = state.busy;
+  $("send-scenario").disabled = state.busy || !connected;
+  $("batch-scenario").disabled = state.busy || !connected;
+  const pendingRows = [...$("scenario-rows").children].some((row) =>
+    state.bookings.some((booking) => booking.id === row.bookingId && booking.status === "PENDING"));
+  $("send-scenario").className = `btn ${pendingRows ? "btn-secondary" : "btn-primary"}`;
+  $("batch-scenario").className = `btn ${pendingRows ? "btn-primary" : "btn-secondary"}`;
+  $("rider-count").disabled = state.busy;
+  document.querySelectorAll(".scenario-row input, .scenario-row select").forEach((input) => {
+    input.disabled = state.busy;
+  });
+  document.querySelectorAll("[data-trip-action]").forEach((button) => {
+    button.disabled = state.busy || !connected;
   });
   $("export").disabled = state.busy || !state.calls.length;
 }
@@ -191,7 +216,11 @@ async function perform(action) {
   try {
     await action();
   } catch (error) {
-    notify(`${error.message} See Live API Inspector below for detailed response payload.`, "error");
+    if (!state.done.has(0)) {
+      state.admin = null;
+      state.riders = [];
+    }
+    notify(`${error.message} Check the request log for the response. Refresh before retrying a timed-out operation.`, "error");
     $("feedback").focus();
   } finally {
     state.busy = false;
@@ -241,7 +270,7 @@ async function api(method, path, { token, body, employee, expected = 200 } = {})
 
     ensure(
       response.status === expected,
-      `${method} ${path} returned HTTP ${response.status}: ${typeof data === "string" ? data.slice(0, 240) : JSON.stringify(data).slice(0, 360)}`
+      `HTTP ${response.status}: ${typeof data === "string" ? data.slice(0, 240) : `${data.code || "Request failed"} — ${data.message || "See the response in the request log."}`}`
     );
     return data;
   } catch (error) {
@@ -263,12 +292,14 @@ async function api(method, path, { token, body, employee, expected = 200 } = {})
 
 function renderActivity() {
   $("activity").replaceChildren();
+  $("activity-history").replaceChildren();
+  $("older-requests").hidden = state.calls.length <= 5;
   if (!state.calls.length) {
     $("activity").append(element("p", "empty-feed", "HTTP requests will appear here in real time as you run actions."));
     return;
   }
 
-  [...state.calls].reverse().forEach((call) => {
+  [...state.calls].reverse().forEach((call, index) => {
     const detail = element("details", "activity-item");
     const summary = element("summary");
 
@@ -289,7 +320,7 @@ function renderActivity() {
 
     body.append(meta, code);
     detail.append(summary, body);
-    $("activity").append(detail);
+    $(index < 5 ? "activity" : "activity-history").append(detail);
   });
 }
 
@@ -309,7 +340,8 @@ function timeLabel(value) {
 }
 
 function driverLabel(id) {
-  return id ? `Driver …${id.slice(-8)}` : "None (PLANNED state)";
+  const fixture = { "00000065": "Cab 1 · 4 seats", "00000066": "Cab 2 · 4 seats", "00000067": "Cab 3 · 2 seats", "00000068": "Cab 4 · offline" };
+  return id ? fixture[id.slice(-8)] || `Driver …${id.slice(-8)}` : "Awaiting acceptance";
 }
 
 function renderTrips() {
@@ -324,16 +356,15 @@ function renderTrips() {
     $("trips").append(empty);
   }
 
-  state.trips.forEach((trip) => {
+  [...state.trips].sort((a, b) => b.peakPassengers - a.peakPassengers).forEach((trip) => {
     const card = element("article", "trip");
     const head = element("div", "trip-top");
     head.append(
       element("h3", "", `${trip.bookingIds.length} ${trip.bookingIds.length === 1 ? "Rider" : "Riders"}`),
       element("span", "status-pill", trip.tripStatus)
     );
-    card.append(head, element("p", "trip-id", `Trip ID: ${trip.tripId}`));
+    card.append(head, element("p", "trip-id", `Trip …${trip.tripId.slice(-8)}`));
 
-    // Occupancy graphical indicators
     const seats = element("div", "occupancy-bar");
     seats.setAttribute("aria-hidden", "true");
     for (let i = 0; i < trip.planningCapacity; i++) {
@@ -341,20 +372,21 @@ function renderTrips() {
     }
     card.append(
       seats,
-      element("p", "trip-facts", `Peak Occupancy: ${trip.peakPassengers} / ${trip.planningCapacity} planning seats`),
-      element("p", "trip-facts", `Grouped: ${trip.bookingIds.map(riderLabel).join(", ") || "No riders"}`),
-      element("p", "trip-facts", `Assigned Driver: ${driverLabel(trip.assignedDriverId)}`),
-      element("p", "trip-facts", `Dispatch: ${trip.outcome} · ${trip.attemptsUsed}/${trip.attemptLimit} offers used`)
+      element("p", "trip-facts", `Peak occupancy ${trip.peakPassengers} / ${trip.planningCapacity} planning seats`),
+      element("p", "trip-facts", trip.bookingIds.map(riderLabel).join(", ") || "No riders"),
+      element("p", "trip-facts", driverLabel(trip.assignedDriverId)),
+      element("p", "trip-facts", `${trip.outcome} · ${trip.attemptsUsed}/${trip.attemptLimit} offers`)
     );
+    const active = trip.offers.find((offer) => offer.id === trip.activeOfferId);
+    if (active) card.append(element("p", "trip-facts", `Offered to ${driverLabel(active.driverId)}`));
 
-    // Route stops
     const route = element("details");
-    route.append(element("summary", "", `Ordered Route Stops & SLA (${trip.stops.length} stops)`));
+    route.append(element("summary", "", `Route & pickup times · ${trip.stops.length} stops`));
     const wrap = element("div", "table-wrap");
     const table = element("table");
     const thead = element("thead");
     const headings = element("tr");
-    ["Stop", "Rider", "Est. Arrival", "SLA Deadline", "Pickup SLA"].forEach((label) => {
+    ["Stop", "Rider", "Estimate", "Deadline", "SLA"].forEach((label) => {
       const th = element("th", "", label);
       th.scope = "col";
       headings.append(th);
@@ -383,44 +415,43 @@ function renderTrips() {
     route.append(wrap);
     card.append(route);
 
-    // Offers
     const offers = element("details");
-    offers.append(element("summary", "", `Driver Offer History (${trip.offers.length})`));
+    offers.append(element("summary", "", `Driver offers · ${trip.offers.length}`));
     trip.offers.forEach((offer) => {
       const row = element("div", "offer-row");
       row.append(
-        element("span", "", driverLabel(offer.driverId)),
+        element("span", "", `${driverLabel(offer.driverId)} · expires ${timeLabel(offer.expiresAt)}`),
         element("strong", "", offer.status)
       );
       offers.append(row);
     });
     card.append(offers);
+    const pickups = trip.stops.filter((stop) => stop.type === "PICKUP");
+    const lastPickup = pickups.map((stop) => stop.estimatedArrivalAt).filter(Boolean).sort().at(-1);
+    card.insertBefore(element("p", "pickup-summary", pickups.every((stop) => stop.withinPickupSla === true)
+      ? `Pickup estimates meet all deadlines${lastPickup ? ` · last pickup ${timeLabel(lastPickup)}` : ""}`
+      : "Check pickup estimates in the route table"), route);
+    if (state.mode === "custom" || state.done.has(7)) addTripControls(card, trip);
     $("trips").append(card);
   });
 
-  const selected = $("trip-select").value;
-  $("trip-select").replaceChildren();
-  if (!state.trips.length) {
-    $("trip-select").append(new Option("No trips available", ""));
-  }
-  state.trips.forEach((trip) => {
-    $("trip-select").append(
-      new Option(`${trip.bookingIds.length} riders · ${trip.tripStatus} · …${trip.tripId.slice(-8)}`, trip.tripId)
-    );
-  });
-  if (state.trips.some((trip) => trip.tripId === selected)) {
-    $("trip-select").value = selected;
-  }
+
 }
 
 async function refreshTrips() {
   const page = await api("GET", "/api/admin/dispatch/trips?size=100", { token: state.admin });
   state.trips = page.content;
   renderTrips();
+  for (const row of $("scenario-rows").children) {
+    if (!row.bookingId) continue;
+    const booking = await api("GET", `/api/v1/bookings/${row.bookingId}`, { token: state.admin });
+    rememberBooking(booking);
+    showBookingResult(row, booking);
+  }
 }
 
 async function connect() {
-  ensure($("password").value, "Enter fixture password or click 'Auto-fill Test Credentials'.");
+  ensure($("password").value, "Enter the local fixture password or choose Use local credentials.");
   const health = await api("GET", "/actuator/health");
   const readiness = await api("GET", "/actuator/health/readiness");
   ensure(health.status === "UP" && readiness.status === "UP", "Health and readiness checks must both be UP.");
@@ -430,28 +461,32 @@ async function connect() {
   ensure(state.admin, "Admin authentication did not return a token.");
 
   state.riders = [];
-  for (let n = 1; n <= 5; n++) {
+  for (let n = 1; n <= 9; n++) {
     const token = (await api("POST", "/auth/login", { body: { username: `local-rider-${n}`, password } })).token;
     ensure(token, `Employee ${n} authentication failed.`);
     state.riders.push({ number: n, employee: employeeId(n), token });
   }
 
   $("password").value = "";
+  $("scenario-inputs").open = true;
   await refreshTrips();
 
   let hasBookings = false;
+  state.bookings = [];
   for (const rider of state.riders) {
     const page = await api("GET", "/api/v1/bookings", { token: rider.token, employee: rider.employee });
     hasBookings ||= page.totalElements > 0;
+    page.content.forEach(rememberBooking);
   }
   state.fresh = !state.trips.length && !hasBookings;
 
-  $("connection").textContent = "Connected (Admin + 5 Employees)";
+  $("connection").textContent = "Connected · 9 riders";
   $("connection").className = "connected";
-  finish(0, "Health and readiness UP. Admin and 5 employee accounts authenticated via JWT.");
+  finish(0, "Connected. Choose the five-rider example or try your own requests.");
 
   if (!state.fresh) {
-    notify("Existing bookings or trips found in database. For a clean controlled walkthrough, reset the Compose volume and restart.", "warning");
+    setMode("custom");
+    notify("Saved rides found. You can inspect them or send custom requests. Reset the local database for a fresh guided example.", "warning");
   }
 }
 
@@ -463,7 +498,7 @@ async function createFive() {
   }
 
   state.bookings = [];
-  for (const rider of state.riders) {
+  for (const rider of state.riders.slice(0, 5)) {
     state.bookings.push(
       await api("POST", "/api/v1/bookings", {
         token: rider.token,
@@ -531,7 +566,7 @@ async function batch() {
     "Routes must satisfy capacity limits (≤ 4 seats) and pickup SLA deadlines."
   );
 
-  finish(3, "Batching complete: 2 trips formed (4 riders + 1 rider). Peak occupancy strictly ≤ 4 seats; all pickup ETAs satisfy promised deadlines.");
+  finish(3, "Two trips formed: 4 riders + 1 rider. Both routes fit four seats and meet every pickup deadline.");
 }
 
 async function explainSplit() {
@@ -543,23 +578,28 @@ async function explainSplit() {
   $("reasons-section").hidden = false;
   $("reasons").replaceChildren();
   $("reasons").append(
-    element("p", "section-subtext", `${check.alternativesEvaluated} stop permutations evaluated · Feasible alternative found: ${check.feasible ? "Yes" : "No"}`)
+    element("p", "section-subtext", `${check.alternativesEvaluated} insertion alternatives checked · Feasible alternative: ${check.feasible ? "Yes" : "No"}`)
   );
 
   check.rejections.forEach((reason) => {
     const box = element("div", "reason-box");
     box.append(element("strong", "", `${reason.constraintCode} (${reason.alternativesRejected} permutations rejected)`));
-    if (reason.constraintCode === "CAPACITY_EXCEEDED") {
+    if (reason.constraintCode === "CAPACITY") {
       box.append(element("p", "", `Inserting rider requires peak occupancy of ${reason.examplePeakPassengers} simultaneous passengers (maximum vehicle capacity: ${comparison.planningCapacity}).`));
-    } else if (reason.constraintCode === "PICKUP_SLA_VIOLATION") {
-      box.append(element("p", "", `Reordering stops to stay within capacity delays pickup to ${timeLabel(reason.estimatedPickupAt)}, breaching promised deadline of ${timeLabel(reason.pickupSlaDeadline)} for ${riderLabel(reason.affectedBooking)}.`));
+    } else if (reason.constraintCode === "PICKUP_SLA") {
+      box.append(element("p", "", `This alternative fits ${reason.examplePeakPassengers} riders, but pickup at ${timeLabel(reason.estimatedPickupAt)} misses the ${timeLabel(reason.pickupSlaDeadline)} deadline for ${riderLabel(reason.affectedBooking)}.`));
     } else {
       box.append(element("p", "", JSON.stringify(reason)));
     }
     $("reasons").append(box);
   });
 
-  finish(4, "Constraint validation verified: Rider 5 cannot share Trip 1 due to CAPACITY_EXCEEDED (5 > 4 seats) and PICKUP_SLA_VIOLATION.");
+  ensure(!check.feasible
+    && check.rejections.some((reason) => reason.constraintCode === "CAPACITY")
+    && check.rejections.some((reason) => reason.constraintCode === "PICKUP_SLA"
+      && reason.examplePeakPassengers <= comparison.planningCapacity),
+    "The API did not show the expected capacity and within-capacity SLA failures. Inspect the actual result.");
+  finish(4, "Some insertions need five seats. Others fit four seats but miss a pickup deadline. No feasible insertion was found.");
 }
 
 async function dispatch() {
@@ -579,7 +619,7 @@ async function dispatch() {
     );
 
     state.dispatchPhase = 1;
-    state.results[5] = `Driver ${driverLabel(first.driverId)} rejected. Fallback driver ${driverLabel(replacement.driverId)} received offer. Click below to accept offer.`;
+    state.results[5] = `${driverLabel(first.driverId)} rejected. ${driverLabel(replacement.driverId)} now has the offer. Accept explicitly to assign the trip.`;
     notify(state.results[5], "success");
   } else {
     const accepted = await api("POST", `/api/admin/dispatch/offers/${trip.activeOfferId}/accept`, { token: state.admin });
@@ -590,7 +630,7 @@ async function dispatch() {
       "Driver offer acceptance failed to commit assignment."
     );
     state.dispatchPhase = 2;
-    finish(5, `Trip DISPATCHED with driver ${driverLabel(accepted.assignedDriverId)}. Saved pickup ETAs now incorporate driver approach time.`);
+    finish(5, `Trip DISPATCHED with ${driverLabel(accepted.assignedDriverId)}. Pickup estimates now include driver approach.`);
   }
 }
 
@@ -641,12 +681,19 @@ async function metrics() {
     $("metrics").append(row);
   }
 
-  finish(7, "Workflow complete. Live Micrometer operational counters retrieved from Actuator.");
+  finish(7, "Example complete. You can now try the trip controls or switch to Your scenario.");
+  renderTrips();
 }
 
 const actions = [connect, createFive, correctness, batch, explainSplit, dispatch, cancelOne, metrics];
 
 $("stage-action").addEventListener("click", () => {
+  if (state.done.has(state.step) && state.step < stages.length - 1 && !state.busy) {
+    state.step++;
+    renderStage();
+    $("stage-title").focus();
+    return;
+  }
   if (!stageAllowed()) return;
   const index = state.step;
   perform(async () => {
@@ -658,7 +705,7 @@ $("stage-action").addEventListener("click", () => {
 $("fill-fixtures").addEventListener("click", () => {
   $("username").value = "local-admin";
   $("password").value = "local-only-password";
-  notify("Pre-filled local seed credentials (local-admin / local-only-password). Click Connect to authenticate.");
+  notify("Local credentials filled. Click Connect.");
 });
 
 $("refresh").addEventListener("click", () => perform(async () => {
@@ -680,12 +727,20 @@ $("signout").addEventListener("click", () => {
   state.solo = null;
   state.dispatchPhase = 0;
   state.step = 0;
+  setMode("guided");
+  $("scenario-rows").replaceChildren();
+  $("rider-count").value = "9";
+  $("scenario-inputs").open = true;
+  renderScenarioRows();
+  $("scenario-progress").textContent = "";
 
   $("password").value = "";
   $("connection").textContent = "Not connected";
   $("connection").className = "";
   $("reasons-section").hidden = true;
   $("metrics-section").hidden = true;
+  $("activity-history").replaceChildren();
+  $("older-requests").hidden = true;
   $("activity").replaceChildren(element("p", "empty-feed", "Session cleared. Server state in PostgreSQL remains intact."));
 
   renderTrips();
@@ -702,65 +757,211 @@ $("export").addEventListener("click", () => {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 });
 
-document.querySelectorAll("[data-extra]").forEach((button) => button.addEventListener("click", () => perform(async () => {
-  const operation = button.dataset.extra;
+function setMode(mode) {
+  state.mode = mode;
+  $("guide-panel").hidden = mode !== "guided";
+  $("guide-nav").hidden = mode !== "guided";
+  $("custom-panel").hidden = mode !== "custom";
+  $("guided-mode").setAttribute("aria-pressed", String(mode === "guided"));
+  $("custom-mode").setAttribute("aria-pressed", String(mode === "custom"));
+  document.querySelector(".console-grid").classList.toggle("custom", mode === "custom");
+  $("reasons-section").hidden = mode !== "guided" || !state.done.has(4);
+  $("metrics-section").hidden = mode !== "guided" || !state.done.has(7);
+  renderStage();
+  renderTrips();
+}
 
-  if (operation === "escalations") {
-    const issues = await api("GET", "/api/v1/escalations/open", { token: state.admin });
-    notify(`${issues.length} open SLA escalations found. See API inspector for details.`, "success");
-    return;
-  }
+function rememberBooking(booking) {
+  const index = state.bookings.findIndex((item) => item.id === booking.id);
+  if (index < 0) state.bookings.push(booking);
+  else state.bookings[index] = booking;
+}
 
-  if (operation === "create") {
-    const rider = state.riders.find((entry) => entry.number === Number($("employee-select").value));
-    ensure(rider, "Authenticate accounts first before creating ad-hoc bookings.");
-    const coord = (id) => Number($(id).value);
-    const body = {
-      pickup: { latitude: coord("pickup-lat"), longitude: coord("pickup-lon") },
-      dropoff: { latitude: coord("dropoff-lat"), longitude: coord("dropoff-lon") }
-    };
-    const booking = await api("POST", "/api/v1/bookings", {
-      token: rider.token,
-      employee: rider.employee,
-      body,
-      expected: 201
+function showBookingResult(row, booking) {
+  row.bookingId = booking.id;
+  const result = row.querySelector(".scenario-result");
+  result.className = "scenario-result";
+  result.textContent = `${booking.status} · Booking …${booking.id.slice(-8)} · pickup by ${timeLabel(booking.pickupSlaDeadline)}${booking.tripId ? ` · Trip …${booking.tripId.slice(-8)}` : ""}`;
+}
+
+function renderScenarioRows() {
+  const count = Number($("rider-count").value);
+  if (!Number.isInteger(count) || count < 1 || count > 9) return;
+  const rows = $("scenario-rows");
+  while (rows.children.length > count) rows.lastElementChild.remove();
+  while (rows.children.length < count) {
+    const n = rows.children.length + 1;
+    const row = element("div", "scenario-row");
+    const riderLabel = element("label", "", `Rider ${n}`);
+    const select = element("select");
+    select.dataset.field = "rider";
+    for (let i = 1; i <= 9; i++) select.append(new Option(`Employee ${i}`, String(i)));
+    select.value = String(n);
+    riderLabel.append(select);
+    row.append(riderLabel);
+    for (const [field, label, value, min, max] of [
+      ["pickupLat", "Pickup latitude", 12.9716, -90, 90],
+      ["pickupLon", "Pickup longitude", 77.5946, -180, 180],
+      ["dropoffLat", "Dropoff latitude", 12.8000, -90, 90],
+      ["dropoffLon", "Dropoff longitude", 77.5946, -180, 180]
+    ]) {
+      const group = element("label", "", label);
+      const input = element("input");
+      input.type = "number";
+      input.step = "any";
+      input.min = min;
+      input.max = max;
+      input.value = value;
+      input.required = true;
+      input.dataset.field = field;
+      group.append(input);
+      row.append(group);
+    }
+    row.append(element("div", "scenario-result"));
+    row.addEventListener("change", () => {
+      row.bookingId = null;
+      row.querySelector(".scenario-result").textContent = "";
     });
-    state.fresh = false;
-    state.bookings.push(booking);
-    await refreshTrips();
-    notify(`Created booking ${booking.id}: ${booking.status}. (Controlled scenario disabled after ad-hoc mutation)`, "success");
-    return;
+    rows.append(row);
   }
+}
 
-  ensure($("trip-select").value, "Select a trip from the dropdown.");
-  const trip = await getTrip($("trip-select").value);
+async function sendScenario() {
+  ensure($("rider-count").reportValidity(), "Choose between 1 and 9 riders.");
+  renderScenarioRows();
+  const rows = [...$("scenario-rows").children];
+  const requests = rows.map((row) => {
+    const field = (name) => row.querySelector(`[data-field="${name}"]`);
+    for (const input of row.querySelectorAll("input")) {
+      ensure(input.reportValidity(), "Enter valid coordinates for every rider.");
+    }
+    const rider = state.riders.find((entry) => entry.number === Number(field("rider").value));
+    ensure(rider, "Connect the fixture accounts first.");
+    return { row, rider, body: {
+      pickup: { latitude: Number(field("pickupLat").value), longitude: Number(field("pickupLon").value) },
+      dropoff: { latitude: Number(field("dropoffLat").value), longitude: Number(field("dropoffLon").value) }
+    } };
+  });
+  ensure(new Set(requests.map((entry) => entry.rider.number)).size === rows.length,
+    "Choose a different employee for each row. Use the same employee again in a later submission to try a retry.");
+  state.fresh = false;
+  let completed = 0;
+  let succeeded = 0;
+  $("scenario-progress").textContent = `Sending ${requests.length} requests…`;
+  await Promise.all(requests.map(async ({ row, rider, body }) => {
+    row.bookingId = null;
+    const result = row.querySelector(".scenario-result");
+    result.className = "scenario-result";
+    result.textContent = "Sending…";
+    try {
+      const booking = await api("POST", "/api/v1/bookings", {
+        token: rider.token, employee: rider.employee, body, expected: 201
+      });
+      rememberBooking(booking);
+      showBookingResult(row, booking);
+      succeeded++;
+    } catch (error) {
+      result.className = "scenario-result error";
+      result.textContent = error.message;
+    } finally {
+      completed++;
+      $("scenario-progress").textContent = `${completed}/${requests.length} responses · ${succeeded} successful`;
+    }
+  }));
+  await refreshTrips();
+  notify(`${succeeded}/${requests.length} requests succeeded. ${succeeded ? "Run batching to plan pending requests; confirmed requests have already joined a route." : "Read the row errors and adjust the inputs."}`, succeeded === requests.length ? "success" : "warning");
+}
 
-  if (operation === "execute") {
-    ensure(trip.assignedDriverId && ["DISPATCHED", "IN_PROGRESS"].includes(trip.tripStatus), "Driver must accept offer before recording stop execution.");
-    let next = null;
+function addTripControls(card, trip) {
+  const controls = element("div", "trip-actions");
+  const add = (label, operation, primary = false) => {
+    const button = element("button", `btn ${primary ? "btn-primary" : "btn-secondary"}`, label);
+    button.dataset.tripAction = operation;
+    button.disabled = state.busy;
+    button.addEventListener("click", () => perform(() => operateTrip(trip.tripId, operation)));
+    controls.append(button);
+  };
+  if (trip.tripStatus === "PLANNED") {
+    const offer = trip.offers.find((entry) => entry.id === trip.activeOfferId);
+    const assignedElsewhere = offer && state.trips.some((other) => other.tripId !== trip.tripId
+      && other.assignedDriverId === offer.driverId && ["DISPATCHED", "IN_PROGRESS"].includes(other.tripStatus));
+    if (trip.activeOfferId && (assignedElsewhere || trip.outcome === "OFFER_EXPIRED")) {
+      add("Find next driver", "advance", true);
+    } else if (trip.activeOfferId) {
+      add("Accept offer", "accept", true);
+      add("Reject offer", "reject");
+    } else if (trip.attemptsUsed < trip.attemptLimit) add("Find next driver", "advance", true);
+  } else if (["DISPATCHED", "IN_PROGRESS"].includes(trip.tripStatus)) {
+    add("Record next stop", "execute", true);
+  }
+  if (trip.bookingIds.length && ["PLANNED", "DISPATCHED"].includes(trip.tripStatus)) {
+    const details = element("details");
+    details.append(element("summary", "", "Cancel a rider"));
+    const label = element("label", "", "Booking to cancel");
+    const select = element("select");
+    trip.bookingIds.forEach((id) => select.append(new Option(riderLabel(id), id)));
+    label.append(select);
+    const cancel = element("button", "btn btn-secondary", "Cancel selected booking");
+    cancel.dataset.tripAction = "cancel";
+    cancel.addEventListener("click", () => perform(() => operateTrip(trip.tripId, "cancel", select.value)));
+    details.append(label, cancel);
+    card.append(details);
+  }
+  if (controls.childElementCount) card.append(controls);
+}
+
+async function operateTrip(id, operation, bookingId) {
+  state.fresh = false;
+  const trip = await getTrip(id);
+  let message;
+  if (operation === "cancel") {
+    const owner = await api("GET", `/api/v1/bookings/${bookingId}`, { token: state.admin });
+    const booking = await api("DELETE", `/api/v1/bookings/${bookingId}`, {
+      token: state.admin, employee: owner.employeeId
+    });
+    rememberBooking(booking);
+    message = `${riderLabel(bookingId)} cancelled. The backend replanned the affected route.`;
+  } else if (operation === "execute") {
+    ensure(trip.assignedDriverId && ["DISPATCHED", "IN_PROGRESS"].includes(trip.tripStatus), "Accept a driver offer first.");
+    let next;
     for (const stop of trip.stops) {
       const booking = await api("GET", `/api/v1/bookings/${stop.bookingId}`, { token: state.admin });
+      rememberBooking(booking);
       if ((stop.type === "PICKUP" && booking.status === "CONFIRMED") || (stop.type === "DROPOFF" && booking.status === "PICKED_UP")) {
         next = stop;
         break;
       }
     }
-    ensure(next, "No unrecorded stop remaining for this trip.");
-    await api("POST", `/api/admin/bookings/${next.bookingId}/${next.type === "PICKUP" ? "pickup" : "dropoff"}`, { token: state.admin });
-    state.fresh = false;
-    notify(`Recorded ${next.type} for ${riderLabel(next.bookingId)}.`, "success");
+    ensure(next, "This trip has no unfinished stops.");
+    const booking = await api("POST", `/api/admin/bookings/${next.bookingId}/${next.type === "PICKUP" ? "pickup" : "dropoff"}`, { token: state.admin });
+    rememberBooking(booking);
+    message = `${next.type === "PICKUP" ? "Picked up" : "Dropped off"} ${riderLabel(next.bookingId)}.`;
   } else if (operation === "advance") {
-    const result = await api("POST", `${tripPath(trip.tripId)}/advance`, { token: state.admin });
-    state.fresh = false;
-    notify(`Dispatch advanced: ${result.outcome} (Attempts: ${result.attemptsUsed}/${result.attemptLimit}).`, "success");
+    const result = await api("POST", `${tripPath(id)}/advance`, { token: state.admin });
+    message = `Dispatch: ${result.outcome}.`;
   } else {
-    ensure(trip.activeOfferId, `No active offer available on trip: ${trip.outcome}.`);
+    ensure(trip.activeOfferId, `No active offer: ${trip.outcome}. Refresh the trip.`);
     const result = await api("POST", `/api/admin/dispatch/offers/${trip.activeOfferId}/${operation}`, { token: state.admin });
-    state.fresh = false;
-    notify(`Offer ${operation}: status=${result.tripStatus}, outcome=${result.outcome}.`, "success");
+    message = operation === "accept" ? `${driverLabel(result.assignedDriverId)} accepted · ${result.tripStatus}.` : `Offer rejected · ${result.outcome}.`;
   }
-
   await refreshTrips();
-})));
+  const updated = state.trips.find((entry) => entry.tripId === id);
+  if (updated?.tripStatus === "COMPLETED") message += " Trip completed; driver released.";
+  notify(message, "success");
+}
 
+$("guided-mode").addEventListener("click", () => setMode("guided"));
+$("custom-mode").addEventListener("click", () => setMode("custom"));
+$("rider-count").addEventListener("change", renderScenarioRows);
+$("rider-count").addEventListener("input", renderScenarioRows);
+$("send-scenario").addEventListener("click", () => perform(sendScenario));
+$("batch-scenario").addEventListener("click", () => perform(async () => {
+  state.fresh = false;
+  const result = await api("POST", "/api/admin/batching/trigger", { token: state.admin });
+  await refreshTrips();
+  $("scenario-inputs").open = false;
+  notify(`${result.bookingsConsidered} requests considered · ${result.tripsFormed} trips formed · ${result.bookingsLeftPending} left pending in this cycle.${result.bookingsConsidered === 0 ? " Requests may already be confirmed, collecting, expired or locked. Check their statuses in the rows and request log." : ""}`, "success");
+}));
+
+renderScenarioRows();
 renderStage();
