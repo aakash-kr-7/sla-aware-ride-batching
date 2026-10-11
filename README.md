@@ -2,7 +2,7 @@
 
 A Java Spring Boot backend that combines employee ride requests into shared trips while enforcing modelled pickup deadlines, seat capacity and rider detour limits.
 
-Jump to the [algorithm](#batching-algorithm), [tests](#how-to-run-tests) or [quick demo](#quick-demo).
+Jump to the [algorithm](#batching-algorithm), [tests](#how-to-run-tests) or [local setup](docs/local-development.md).
 
 ## Problem
 
@@ -22,7 +22,7 @@ Ad-hoc employee pickups can produce unnecessary cab journeys. Nearby pickups and
 | Dispatch | Java services for eligible-driver ranking, offers, rejection cool-off and atomic acceptance; no driver HTTP API |
 | Operations | PostgreSQL persistence, Flyway migrations, JWT ownership/role checks, zone caching, health, metrics and Prometheus |
 
-The [requirements matrix](docs/requirements-traceability.md) links these claims to implementation, tests and demo evidence.
+The [requirements matrix](docs/requirements-traceability.md) links these claims to implementation, tests and explicit limitations.
 
 ## Architecture
 
@@ -78,14 +78,14 @@ PostgreSQL tests force these races and check committed outcomes. They cover conc
 
 ## How to run
 
-Requires JDK 17+ and a running Docker daemon. The reviewer demo also requires Docker Compose and Python 3.9+. Maven is supplied by the wrapper; first use downloads dependencies and container images.
+Requires JDK 17+ and Docker with Compose. Maven is supplied by the wrapper; first use downloads dependencies and container images.
 
 ```sh
 git clone https://github.com/aakash-kr-7/sla-aware-ride-batching.git
 cd sla-aware-ride-batching
 ```
 
-The quick demo below needs no environment editing. [Ordinary local setup](docs/demo.md#local-http-walkthrough) requires supplied DB/JWT values and explicit accounts/zones. Normal app port: 8080; isolated demo: 18080.
+Follow [local setup](docs/local-development.md): supply DB/JWT values, start PostgreSQL and explicitly enable admin bootstrap if needed. Startup creates no business records; employee/zone/driver provisioning has no HTTP API. Normal app port: 8080. Swagger: `http://127.0.0.1:8080/swagger-ui/index.html`.
 
 ## How to run tests
 
@@ -93,36 +93,20 @@ The quick demo below needs no environment editing. [Ordinary local setup](docs/d
 ./mvnw clean verify
 ```
 
-On PowerShell use `./mvnw.cmd clean verify`. This runs the full suite and packages the executable JAR under `target/`. Integration tests use disposable PostgreSQL Testcontainers databases, independent of Compose/`.env`. `./mvnw test` runs tests alone. CI runs the same clean build, then the separately enabled demo test.
-
-## Quick demo
-
-```sh
-python scripts/demo/demo.py reset
-python scripts/demo/demo.py run --hold
-```
-
-Use `python3` if required. macOS/Linux equivalents: `./scripts/demo/reset.sh` and `./scripts/demo/run.sh --hold`. The runner starts PostgreSQL on **55432** and the actual HTTP application on **127.0.0.1:18080**, then asserts:
-
-duplicate identity/count → zone rejection → four-plus-one split → SLA split → eligible offer → rejection/cool-off → backup acceptance → late insertion → isolated cancellation → metrics.
-
-The test-only runner uses real HTTP plus existing Java services for driver offers/trip inspection; it is absent from the application JAR. [Walkthrough](docs/demo-walkthrough.md): 6–10 minutes, commands and observed evidence under `target/demo/`. Open [demo Swagger](http://localhost:18080/swagger-ui/index.html) while held.
-
-Stop with `Ctrl+C` or `python scripts/demo/demo.py stop`. Reset deletes only the disposable demo project's volume. `clean verify` removes demo evidence; regenerate it afterward.
+On PowerShell use `./mvnw.cmd clean verify`. This runs the full suite and packages the executable JAR under `target/`. Integration tests use disposable PostgreSQL Testcontainers databases, independent of Compose/`.env`. `./mvnw test` runs tests alone. CI runs the same clean build.
 
 ## Documentation map
 
 | Read | Purpose |
 | --- | --- |
-| [Project explained](docs/project-explained.md) | Plain-language design, file map, Swagger controls and how each case-study scenario arises |
 | [Requirements traceability](docs/requirements-traceability.md), [test matrix](docs/test-matrix.md) | Implementation claims, assertions and coverage gaps |
 | [Architecture](docs/architecture.md), [domain model](docs/domain-model.md) | Responsibilities, request flow and reachable states |
 | [Batching strategy](docs/batching-strategy.md), [algorithm analysis](docs/algorithm-analysis.md) | Search, feasibility and computational cost |
-| [API contract](docs/api-design.md), [demo walkthrough](docs/demo-walkthrough.md) | Actual endpoints and reproducible behaviour |
+| [API contract](docs/api-design.md), [local development](docs/local-development.md) | Actual endpoints, startup and provisioning boundaries |
 | [Assumptions](docs/assumptions.md), [failure modes](docs/failure-modes.md) | Policy choices, approximations and operational limits |
-| [Correctness review](docs/correctness-review.md), [decisions](docs/decisions/0005-handle-booking-deduplication.md), [contribution conventions](CONTRIBUTING.md) | Historical findings, design rationale and working standards |
+| [Deduplication](docs/decisions/0005-handle-booking-deduplication.md), [clustering](docs/decisions/0006-request-clustering.md), [caching](docs/decisions/007-zone-caching.md) | Design rationale and trade-offs |
 
-Source lives in `src/main`, tests in `src/test`, demo commands in `scripts/demo`, and optional JMH source in `src/benchmark`. [Benchmark notes](docs/benchmarks/batching.md) are dated synthetic measurements, not current service-performance claims.
+Source lives in `src/main`, tests in `src/test`, and optional JMH source in `src/benchmark`. [Benchmark notes](docs/benchmarks/batching.md) are dated synthetic measurements, not current service-performance claims.
 
 ## Known limitations
 

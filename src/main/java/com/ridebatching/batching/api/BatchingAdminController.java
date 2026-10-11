@@ -22,7 +22,7 @@ public class BatchingAdminController {
 
     /**
      * Administrative endpoint to manually trigger a single batching cycle.
-     * Primarily used for testing, demonstration, or operational intervention.
+     * Used for testing or explicit operational intervention.
      */
     @PostMapping("/trigger")
     @PreAuthorize("hasRole('ADMIN')")

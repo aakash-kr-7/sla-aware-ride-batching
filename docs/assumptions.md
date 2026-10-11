@@ -20,6 +20,6 @@ The limits above describe computed acceptance, not real-world pickup or road-ETA
 
 ## Environment and possible production work
 
-DB password and JWT signing secret are required environment values. Compose reads `.env`; Spring Boot needs exported values. The local profile only creates an admin when explicitly enabled with supplied credentials and the account table is empty; tests use separate signing material and disposable DBs. See [demo](demo.md) for setup and [traceability](requirements-traceability.md) for requirement coverage.
+DB password and JWT signing secret are required environment values. Compose reads `.env`; Spring Boot needs exported values. The local profile only creates an admin when explicitly enabled with supplied credentials and the account table is empty; tests use separate signing material and disposable DBs. See [local development](local-development.md) for setup and [traceability](requirements-traceability.md) for requirement coverage.
 
 Road-network/traffic ETA, bounded claim sizes and complete execution/cancellation handling are future improvements. They are not properties of the current submission.

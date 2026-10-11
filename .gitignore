@@ -27,3 +27,6 @@ __pycache__/
 hs_err_pid*
 .DS_Store
 Thumbs.db
+
+/personal_use/
+/Case Study 7 - On-Demand-Ride-Batching.pdf
