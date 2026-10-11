@@ -4,14 +4,15 @@ import com.ridebatching.booking.Booking;
 import com.ridebatching.config.AppProperties;
 import com.ridebatching.geo.Bearing;
 import com.ridebatching.zone.ServiceabilityService;
-import com.ridebatching.zone.ServiceableZone;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
+import java.util.TreeMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Groups compatible requests into candidate trips based on their pickup zone and heading.
@@ -32,6 +33,7 @@ import java.util.stream.Collectors;
  */
 @Component
 public class RequestClusterer {
+    private static final Logger log = LoggerFactory.getLogger(RequestClusterer.class);
 
     private final ServiceabilityService serviceabilityService;
     private final double maxBearingAngleDiffDegrees;
@@ -40,11 +42,22 @@ public class RequestClusterer {
                             AppProperties appProperties) {
         this.serviceabilityService = serviceabilityService;
         this.maxBearingAngleDiffDegrees = appProperties.batching().maxBearingAngleDiffDegrees();
+        if (maxBearingAngleDiffDegrees < 0 || maxBearingAngleDiffDegrees > 180) {
+            throw new IllegalArgumentException("Direction threshold must be between 0 and 180 degrees");
+        }
     }
 
     public List<List<Booking>> clusterBookings(List<Booking> bookings) {
-        Map<Long, List<Booking>> byZone = bookings.stream()
-            .collect(Collectors.groupingBy(this::resolveZoneId));
+        Map<Long, List<Booking>> byZone = new TreeMap<>();
+        for (Booking booking : bookings) {
+            var zone = serviceabilityService.findZoneFor(booking.getPickupLocation());
+            if (zone.isPresent()) {
+                byZone.computeIfAbsent(zone.get().getId(), ignored -> new ArrayList<>()).add(booking);
+            } else {
+                // A zone may have been deactivated after admission. Never batch a sentinel zone.
+                log.warn("Booking left pending: pickup has no active service zone, bookingId={}", booking.getId());
+            }
+        }
 
         List<List<Booking>> allClusters = new ArrayList<>();
         
@@ -58,12 +71,6 @@ public class RequestClusterer {
         });
         
         return allClusters;
-    }
-
-    private Long resolveZoneId(Booking booking) {
-        return serviceabilityService.findZoneFor(booking.getPickupLocation())
-            .map(ServiceableZone::getId)
-            .orElse(-1L); // -1L captures bookings that fell out of active zones since creation
     }
 
     private List<List<Booking>> clusterWithinZone(List<Booking> zoneBookings) {

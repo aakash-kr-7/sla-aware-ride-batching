@@ -1,15 +1,15 @@
 # ADR 006: Leader-Based Direction Clustering
 
-Status: Component implemented and unit-tested; not integrated into `formBatches`.
+Status: Implemented in transactional batch formation, with unit and PostgreSQL integration tests.
 
 ## Decision and rationale
 
-Group bookings by resolved pickup-zone ID, sort zones by ID and bookings by creation time/UUID, then add each booking to the first cluster whose leader bearing is within the configured angle. The first booking stays the leader. An unknown current zone uses sentinel ID -1.
+Partition bounded eligible claims by source UTC window, group each window by resolved pickup-zone ID, sort zones by ID and bookings by creation time/UUID, then add each booking to the first cluster whose leader bearing is within the configured angle. The first booking stays the leader. Pickups without an active zone remain pending and are omitted from grouping.
 
 This is a cheap geographic prefilter before expensive route evaluation. Leader comparison is inspectable and avoids transitive chaining through many slightly different headings. It is not a detour constraint: two members may each lie within 45 degrees of a leader while being 90 degrees apart from each other.
 
 ## Trade-offs and integration boundary
 
-Greedy membership depends on leader choice and does not optimize grouping globally. Zone membership is recomputed and can become stale through caching; the unknown-zone group is not rejection handling.
+Greedy membership depends on leader choice and does not optimize grouping globally. Zone membership is recomputed and can become stale through caching. A removed zone yields a pending request and a warning, without automatic cancellation or escalation.
 
-Window/zone/direction orchestration remains unconnected. A future integration must still evaluate capacity, SLA and detour and bound actual input size; a 15-minute bucket does not establish a demand bound. See [strategy](../batching-strategy.md) and [complexity](../algorithm-analysis.md) for current execution and costs.
+The default claim limit is 100 per worker/cycle. Windows close normally; a deadline within the configured five-minute guard enables early processing. Each resulting cluster still passes capacity, SLA and detour evaluation. Limits/concurrent workers may fragment clusters and reduce pooling; late insertion is a separate feasibility-based path. See [strategy](../batching-strategy.md) for exact eligibility/expiry rules and [complexity](../algorithm-analysis.md) for costs.

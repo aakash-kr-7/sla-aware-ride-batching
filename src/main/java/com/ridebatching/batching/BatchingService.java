@@ -11,6 +11,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.Clock;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.List;
 import java.util.UUID;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -26,13 +30,22 @@ public class BatchingService {
     private final BatchPlanner batchPlanner;
     private final jakarta.persistence.EntityManager entityManager;
     private final MeterRegistry meterRegistry;
+    private final BatchClaimPolicy claimPolicy;
+    private final RequestClusterer clusterer;
+    private final Clock clock;
 
-    public BatchingService(BookingRepository bookingRepository, TripRepository tripRepository, BatchPlanner batchPlanner, jakarta.persistence.EntityManager entityManager, MeterRegistry meterRegistry) {
+    public BatchingService(BookingRepository bookingRepository, TripRepository tripRepository, BatchPlanner batchPlanner,
+                           jakarta.persistence.EntityManager entityManager, MeterRegistry meterRegistry,
+                           BatchClaimPolicy claimPolicy, RequestClusterer clusterer,
+                           @org.springframework.beans.factory.annotation.Qualifier("batchingClock") Clock clock) {
         this.bookingRepository = bookingRepository;
         this.tripRepository = tripRepository;
         this.batchPlanner = batchPlanner;
         this.entityManager = entityManager;
         this.meterRegistry = meterRegistry;
+        this.claimPolicy = claimPolicy;
+        this.clusterer = clusterer;
+        this.clock = clock;
     }
 
     public record BatchingResult(int bookingsConsidered, int tripsFormed, int bookingsLeftPending) {}
@@ -48,38 +61,52 @@ public class BatchingService {
     public BatchingResult formBatches() {
         Timer.Sample timerSample = Timer.start(meterRegistry);
         try {
-        // 1. Claim eligible pending bookings exclusively for this transaction
-        List<Booking> pendingBookings = bookingRepository.findPendingBookingsForBatching();
+            Instant routeStartTime = clock.instant();
+            // Eligibility and route estimates share one cycle timestamp.
+            List<Booking> pendingBookings = bookingRepository.claimEligibleBookings(routeStartTime,
+                    claimPolicy.closedWindowsBefore(routeStartTime), claimPolicy.urgentDeadlineThrough(routeStartTime),
+                    claimPolicy.maxBookingsPerCycle());
         
-        if (pendingBookings.isEmpty()) {
-            return new BatchingResult(0, 0, 0);
-        }
-        
-        Instant routeStartTime = Instant.now();
-        
-        // 2. Plan trips using the deterministic greedy batch planner
-        List<Trip> trips = batchPlanner.planBatch(pendingBookings, routeStartTime);
-        
-        // 3. Persist trips (cascades to TripStop)
-        tripRepository.saveAll(trips);
-        
-        // 4. Update booking statuses
-        int assignedCount = 0;
-        for (Booking booking : pendingBookings) {
-            if (booking.getTripId() != null) {
-                booking.setStatus(BookingStatus.CONFIRMED);
-                assignedCount++;
+            if (pendingBookings.isEmpty()) {
+                return new BatchingResult(0, 0, 0);
             }
-        }
         
-        int pendingRemaining = pendingBookings.size() - assignedCount;
+            // Preserve source windows even when a backlog spans several closed buckets.
+            // Claim ordering gives windows with the earliest claimed deadlines first.
+            Map<Instant, List<Booking>> windows = new LinkedHashMap<>();
+            for (Booking booking : pendingBookings) {
+                Instant windowStart = claimPolicy.windowFor(booking.getCreatedAt()).start();
+                windows.computeIfAbsent(windowStart, ignored -> new ArrayList<>()).add(booking);
+            }
+            List<Trip> trips = new ArrayList<>();
+            int clusterCount = 0;
+            for (List<Booking> window : windows.values()) {
+                for (List<Booking> cluster : clusterer.clusterBookings(window)) {
+                    clusterCount++;
+                    trips.addAll(batchPlanner.planBatch(cluster, routeStartTime));
+                }
+            }
         
-        meterRegistry.counter("batching.trips_formed").increment(trips.size());
+            // 3. Persist trips (cascades to TripStop)
+            tripRepository.saveAll(trips);
         
-        log.info("Batching cycle completed: considered={}, tripsFormed={}, assigned={}, leftPending={}",
-                pendingBookings.size(), trips.size(), assignedCount, pendingRemaining);
+            // 4. Update booking statuses
+            int assignedCount = 0;
+            for (Booking booking : pendingBookings) {
+                if (booking.getTripId() != null) {
+                    booking.setStatus(BookingStatus.CONFIRMED);
+                    assignedCount++;
+                }
+            }
+        
+            int pendingRemaining = pendingBookings.size() - assignedCount;
+        
+            meterRegistry.counter("batching.trips_formed").increment(trips.size());
+        
+            log.info("Batching cycle completed: considered={}, windows={}, clusters={}, tripsFormed={}, assigned={}, leftPending={}",
+                    pendingBookings.size(), windows.size(), clusterCount, trips.size(), assignedCount, pendingRemaining);
                 
-        return new BatchingResult(pendingBookings.size(), trips.size(), pendingRemaining);
+            return new BatchingResult(pendingBookings.size(), trips.size(), pendingRemaining);
         } finally {
             timerSample.stop(meterRegistry.timer("batching.duration"));
         }

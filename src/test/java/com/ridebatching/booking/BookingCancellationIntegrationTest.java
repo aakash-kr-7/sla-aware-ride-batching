@@ -35,10 +35,14 @@ class BookingCancellationIntegrationTest extends com.ridebatching.AbstractPostgr
 
     @Autowired
     private EmployeeRepository employeeRepository;
+    @Autowired private com.ridebatching.zone.ServiceableZoneRepository zones;
 
     @Test
     @Transactional
     void shouldCancelBookingAndReplanTripWhileLeavingOtherTripsUnchanged() {
+        zones.saveAllAndFlush(List.of(
+                new com.ridebatching.zone.ServiceableZone("First", 12.9716, 77.5946, 1000, true),
+                new com.ridebatching.zone.ServiceableZone("Second", 13.0000, 77.6000, 1000, true)));
         // Create 2 employees for Trip A
         Employee emp1 = employeeRepository.save(new Employee(UUID.randomUUID(), "E1", "Alice", "a@test.com"));
         Employee emp2 = employeeRepository.save(new Employee(UUID.randomUUID(), "E2", "Bob", "b@test.com"));
@@ -93,15 +97,16 @@ class BookingCancellationIntegrationTest extends com.ridebatching.AbstractPostgr
     }
     
     private Booking createTestBooking(Employee emp, double lat, double lon) {
+        java.time.Instant createdAt = java.time.Instant.now().minusSeconds(1200);
         return new Booking(
             UUID.randomUUID(),
             emp,
             new com.ridebatching.geo.GeoPoint(lat, lon),
             new com.ridebatching.geo.GeoPoint(12.9352, 77.6245),
-            java.time.Instant.now(),
+            com.ridebatching.batching.BatchingWindow.forTime(createdAt, java.time.Duration.ofMinutes(15)).start(),
             BookingStatus.PENDING,
             java.time.Instant.now().plusSeconds(3600),
-            java.time.Instant.now(),
+            createdAt,
             UUID.randomUUID().toString()
         );
     }

@@ -124,15 +124,16 @@ public class LateBookingInsertionIntegrationTest extends AbstractPostgresIntegra
     }
 
     private Booking createTestBooking(Employee emp, double lat, double lon) {
+        Instant createdAt = Instant.now().minusSeconds(1200);
         return new Booking(
             UUID.randomUUID(),
             emp,
             new GeoPoint(lat, lon),
             new GeoPoint(12.9352, 77.6245),
-            Instant.now(),
+            com.ridebatching.batching.BatchingWindow.forTime(createdAt, java.time.Duration.ofMinutes(15)).start(),
             BookingStatus.PENDING,
             Instant.now().plusSeconds(3600),
-            Instant.now(),
+            createdAt,
             UUID.randomUUID().toString()
         );
     }

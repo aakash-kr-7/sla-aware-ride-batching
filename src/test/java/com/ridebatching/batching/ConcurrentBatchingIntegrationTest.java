@@ -24,6 +24,7 @@ import java.util.concurrent.Future;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+@org.springframework.boot.test.context.SpringBootTest(properties = "app.batching.max-bookings-per-cycle=3")
 class ConcurrentBatchingIntegrationTest extends AbstractPostgresIntegrationTest {
 
     @Autowired
@@ -39,16 +40,75 @@ class ConcurrentBatchingIntegrationTest extends AbstractPostgresIntegrationTest 
     private TripRepository tripRepository;
 
     private Employee testEmployee;
+    @Autowired private com.ridebatching.zone.ServiceableZoneRepository zones;
     @org.springframework.boot.test.mock.mockito.SpyBean
     private BatchPlanner planner;
     @Autowired private org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     @Test
+    void overlappingBoundedWorkersClaimDisjointRowsAndBothMakeProgress() throws Exception {
+        Instant now = Instant.now();
+        Instant createdAt = now.minusSeconds(1200);
+        Instant slot = BatchingWindow.forTime(createdAt, java.time.Duration.ofMinutes(15)).start();
+        List<Booking> eligible = new ArrayList<>();
+        for (int i = 0; i < 6; i++) {
+            eligible.add(new Booking(new UUID(0, i + 1), testEmployee,
+                    new GeoPoint(0, 0), new GeoPoint(0.01, 0), slot, BookingStatus.PENDING,
+                    now.plusSeconds(3600 + i), createdAt, "overlap-" + i));
+        }
+        Booking collecting = new Booking(new UUID(0, 7), testEmployee, new GeoPoint(0, 0),
+                new GeoPoint(0.01, 0), now, BookingStatus.PENDING, now.plusSeconds(3600), now, "collecting");
+        bookingRepository.saveAllAndFlush(eligible);
+        bookingRepository.saveAndFlush(collecting);
+        var planning = new java.util.concurrent.CountDownLatch(1);
+        var resume = new java.util.concurrent.CountDownLatch(1);
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        org.mockito.Mockito.doAnswer(invocation -> {
+            if (calls.getAndIncrement() == 0) {
+                planning.countDown();
+                assertThat(resume.await(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            }
+            return invocation.callRealMethod();
+        }).when(planner).planBatch(org.mockito.ArgumentMatchers.anyList(), org.mockito.ArgumentMatchers.any());
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<BatchingService.BatchingResult> first = executor.submit(batchingService::formBatches);
+            assertThat(planning.await(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            Future<BatchingService.BatchingResult> second = executor.submit(batchingService::formBatches);
+            assertThat(second.get(10, java.util.concurrent.TimeUnit.SECONDS).bookingsConsidered()).isEqualTo(3);
+            // First worker still holds its three claims; the second has committed different rows.
+            assertThat(bookingRepository.findById(eligible.get(0).getId()).orElseThrow().getStatus())
+                    .isEqualTo(BookingStatus.PENDING);
+            assertThat(bookingRepository.findById(eligible.get(3).getId()).orElseThrow().getStatus())
+                    .isEqualTo(BookingStatus.CONFIRMED);
+            assertThat(batchingService.formBatches().bookingsConsidered()).isZero();
+            resume.countDown();
+            assertThat(first.get(10, java.util.concurrent.TimeUnit.SECONDS).bookingsConsidered()).isEqualTo(3);
+            for (Booking booking : eligible) {
+                Booking saved = bookingRepository.findById(booking.getId()).orElseThrow();
+                assertThat(saved.getStatus()).isEqualTo(BookingStatus.CONFIRMED);
+                assertThat(jdbc.queryForObject("SELECT count(*) FROM trip_stops WHERE booking_id=? AND trip_id=?",
+                        Integer.class, saved.getId(), saved.getTripId())).isEqualTo(2);
+                assertThat(jdbc.queryForObject("SELECT count(DISTINCT trip_id) FROM trip_stops WHERE booking_id=?",
+                        Integer.class, saved.getId())).isEqualTo(1);
+            }
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM trip_stops", Integer.class)).isEqualTo(12);
+            assertThat(bookingRepository.findById(collecting.getId()).orElseThrow().getTripId()).isNull();
+        } finally {
+            resume.countDown();
+            executor.shutdownNow();
+            assertThat(executor.awaitTermination(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+        }
+    }
+
+    @Test
     void competingWorkerMustSkipRowsWhileFirstWorkerIsStillPlanning() throws Exception {
         Instant now = Instant.now();
+        Instant createdAt = now.minusSeconds(1200);
+        Instant slot = BatchingWindow.forTime(createdAt, java.time.Duration.ofMinutes(15)).start();
         Booking booking = bookingRepository.saveAndFlush(new Booking(UUID.randomUUID(), testEmployee,
-                new GeoPoint(0, 0), new GeoPoint(0, 0), now, BookingStatus.PENDING,
-                now.plusSeconds(3600), now, UUID.randomUUID().toString()));
+                new GeoPoint(0, 0), new GeoPoint(0, 0), slot, BookingStatus.PENDING,
+                now.plusSeconds(3600), createdAt, UUID.randomUUID().toString()));
         var planning = new java.util.concurrent.CountDownLatch(1);
         var resume = new java.util.concurrent.CountDownLatch(1);
         org.mockito.Mockito.doAnswer(invocation -> {
@@ -84,6 +144,7 @@ class ConcurrentBatchingIntegrationTest extends AbstractPostgresIntegrationTest 
     void setUp() {
         testEmployee = new Employee(UUID.randomUUID(), "Concurrent Test Employee", "test@example.com", "TestDept");
         employeeRepository.save(testEmployee);
+        zones.saveAndFlush(new com.ridebatching.zone.ServiceableZone("Concurrent", 0, 0, 5000, true));
     }
 
 
@@ -92,16 +153,19 @@ class ConcurrentBatchingIntegrationTest extends AbstractPostgresIntegrationTest 
     void shouldHandleConcurrentBatchingAttemptsWithoutDuplicates() throws Exception {
         // Given 10 pending bookings
         List<Booking> pendingBookings = new ArrayList<>();
+        Instant now = Instant.now();
+        Instant createdAt = now.minusSeconds(1200);
+        Instant slot = BatchingWindow.forTime(createdAt, java.time.Duration.ofMinutes(15)).start();
         for (int i = 0; i < 10; i++) {
             Booking booking = new Booking(
                     UUID.randomUUID(),
                     testEmployee,
                     new GeoPoint(0, 0),
                     new GeoPoint(0.01, 0.01),
-                    Instant.now(),
+                    slot,
                     BookingStatus.PENDING,
-                    Instant.now().plusSeconds(3600), // generous SLA
-                    Instant.now(),
+                    now.plusSeconds(3600), // generous SLA
+                    createdAt,
                     UUID.randomUUID().toString()
             );
             pendingBookings.add(booking);

@@ -22,6 +22,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @org.springframework.boot.test.context.SpringBootTest(webEnvironment = org.springframework.boot.test.context.SpringBootTest.WebEnvironment.RANDOM_PORT)
 class BatchingAdminControllerIntegrationTest extends AbstractPostgresIntegrationTest {
+    private static final Instant NOW = Instant.parse("2026-10-11T10:17:00Z");
+    @org.springframework.boot.test.mock.mockito.MockBean(name = "batchingClock")
+    private java.time.Clock clock;
+    @Autowired private com.ridebatching.zone.ServiceableZoneRepository zones;
 
     @Autowired
     private TestRestTemplate restTemplate;
@@ -42,6 +46,8 @@ class BatchingAdminControllerIntegrationTest extends AbstractPostgresIntegration
 
     @BeforeEach
     void setUp() {
+        org.mockito.Mockito.when(clock.instant()).thenReturn(NOW);
+        zones.saveAndFlush(new com.ridebatching.zone.ServiceableZone("Admin test", 0, 0, 5000, true));
         testEmployee = new Employee(UUID.randomUUID(), "EMP-ADMIN-TEST", "Admin Test Employee", "admin@example.com");
         employeeRepository.save(testEmployee);
         userAccountRepository.save(new com.ridebatching.auth.UserAccount(UUID.randomUUID(),
@@ -55,15 +61,16 @@ class BatchingAdminControllerIntegrationTest extends AbstractPostgresIntegration
     @Test
     void shouldTriggerBatchingAndReturnResult() {
         // Given a pending booking
+        Instant createdAt = NOW.minusSeconds(1200);
         Booking booking = new Booking(
                 UUID.randomUUID(),
                 testEmployee,
                 new GeoPoint(0, 0),
                 new GeoPoint(0.01, 0.01),
-                Instant.now(),
+                com.ridebatching.batching.BatchingWindow.forTime(createdAt, java.time.Duration.ofMinutes(15)).start(),
                 BookingStatus.PENDING,
-                Instant.now().plusSeconds(3600),
-                Instant.now(),
+                NOW.plusSeconds(3600),
+                createdAt,
                 UUID.randomUUID().toString()
         );
         bookingRepository.saveAndFlush(booking);
@@ -87,5 +94,28 @@ class BatchingAdminControllerIntegrationTest extends AbstractPostgresIntegration
         Booking updatedBooking = bookingRepository.findById(booking.getId()).orElseThrow();
         assertThat(updatedBooking.getStatus()).isEqualTo(BookingStatus.CONFIRMED);
         assertThat(updatedBooking.getTripId()).isNotNull();
+    }
+
+    @Test
+    void manualTriggerDoesNotBypassCollectionAndBecomesEligibleAtWindowClose() {
+        Booking booking = bookingRepository.saveAndFlush(new Booking(UUID.randomUUID(), testEmployee,
+                new GeoPoint(0, 0), new GeoPoint(0.01, 0.01),
+                Instant.parse("2026-10-11T10:15:00Z"), BookingStatus.PENDING,
+                NOW.plusSeconds(1200), NOW, UUID.randomUUID().toString()));
+        org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+        headers.setBearerAuth(jwtService.generateToken("test-admin", com.ridebatching.auth.Role.ADMIN));
+        var request = new org.springframework.http.HttpEntity<>(headers);
+        var collecting = restTemplate.postForEntity("/api/admin/batching/trigger", request,
+                BatchingService.BatchingResult.class);
+        assertThat(collecting.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(collecting.getBody()).isEqualTo(new BatchingService.BatchingResult(0, 0, 0));
+        assertThat(bookingRepository.findById(booking.getId()).orElseThrow().getStatus()).isEqualTo(BookingStatus.PENDING);
+
+        org.mockito.Mockito.when(clock.instant()).thenReturn(Instant.parse("2026-10-11T10:30:00Z"));
+        var closed = restTemplate.postForEntity("/api/admin/batching/trigger", request,
+                BatchingService.BatchingResult.class);
+        assertThat(closed.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(closed.getBody()).isEqualTo(new BatchingService.BatchingResult(1, 1, 0));
+        assertThat(bookingRepository.findById(booking.getId()).orElseThrow().getStatus()).isEqualTo(BookingStatus.CONFIRMED);
     }
 }

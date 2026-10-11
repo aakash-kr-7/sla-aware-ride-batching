@@ -18,6 +18,11 @@ import io.micrometer.core.instrument.MeterRegistry;
 public class BatchingConfiguration {
 
     @Bean
+    public java.time.Clock batchingClock() {
+        return java.time.Clock.systemUTC();
+    }
+
+    @Bean
     public CapacityConstraint capacityConstraint() {
         return new CapacityConstraint();
     }

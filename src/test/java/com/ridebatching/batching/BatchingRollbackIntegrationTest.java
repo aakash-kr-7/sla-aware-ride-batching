@@ -37,18 +37,22 @@ class BatchingRollbackIntegrationTest extends AbstractPostgresIntegrationTest {
     private EmployeeRepository employeeRepository;
 
     private UUID employeeId = UUID.randomUUID();
+    @Autowired private com.ridebatching.zone.ServiceableZoneRepository zones;
 
     @BeforeEach
     void setup() {
         Employee emp = new Employee(employeeId, "EMP_R", "Rollback", "rb@test.com");
         employeeRepository.save(emp);
+        zones.saveAndFlush(new com.ridebatching.zone.ServiceableZone("Rollback", 0, 0, 5000, true));
     }
 
     @Test
     void batchFormationRollsBackOnFailureAndAllowsLaterRetry() {
         Employee emp = employeeRepository.findById(employeeId).orElseThrow();
-        Booking booking1 = new Booking(UUID.randomUUID(), emp, new GeoPoint(0,0), new GeoPoint(1,1), Instant.now(), BookingStatus.PENDING, Instant.now().plusSeconds(3600), Instant.now(), "dedup_r1");
-        Booking booking2 = new Booking(UUID.randomUUID(), emp, new GeoPoint(0,0), new GeoPoint(1,1), Instant.now(), BookingStatus.PENDING, Instant.now().plusSeconds(3600), Instant.now(), "dedup_r2");
+        Instant createdAt = Instant.now().minusSeconds(1200); // A closed collection window.
+        Instant slot = BatchingWindow.forTime(createdAt, java.time.Duration.ofMinutes(15)).start();
+        Booking booking1 = new Booking(UUID.randomUUID(), emp, new GeoPoint(0,0), new GeoPoint(1,1), slot, BookingStatus.PENDING, Instant.now().plusSeconds(3600), createdAt, "dedup_r1");
+        Booking booking2 = new Booking(UUID.randomUUID(), emp, new GeoPoint(0,0), new GeoPoint(1,1), slot, BookingStatus.PENDING, Instant.now().plusSeconds(3600), createdAt, "dedup_r2");
         bookingRepository.saveAll(List.of(booking1, booking2));
 
         // Inject controlled failure during saveAll for trips

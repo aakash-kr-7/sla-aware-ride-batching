@@ -148,4 +148,12 @@ class RequestClustererTest {
             UUID.randomUUID().toString()
         );
     }
+
+    @Test
+    void leavesUnknownZonesOutInsteadOfSharingASentinelCluster() {
+        when(serviceabilityService.findZoneFor(any(GeoPoint.class))).thenReturn(Optional.empty());
+        assertEquals(List.of(), clusterer.clusterBookings(List.of(
+                createBooking(new GeoPoint(0, 0), new GeoPoint(1, 0), 10),
+                createBooking(new GeoPoint(0, 0), new GeoPoint(1, 0), 20))));
+    }
 }
