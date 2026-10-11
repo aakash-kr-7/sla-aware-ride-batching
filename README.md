@@ -52,18 +52,18 @@ New trips attempt their initial offer in the planning transaction. Rejection and
 1. Claim at most 100 eligible bookings with PostgreSQL `FOR UPDATE SKIP LOCKED`, ordered by deadline, creation time and ID. Fixed UTC windows normally close after 15 minutes; requests within five minutes of their deadline can leave collection early. Expired requests remain pending, excluded from planning claims; a separate bounded pass persists missed-promise escalations.
 2. Partition by source window, active pickup zone and compatible leader direction, then sort each cluster by pickup deadline and booking ID.
 3. Enumerate pickup/dropoff insertion positions while preserving each existing trip's stop order.
-4. Evaluate the cheapest insertion per trip: route structure, peak occupancy, every pickup deadline and every rider's detour.
+4. Choose the cheapest feasible insertion per trip, checking alternatives against: route structure, peak occupancy, every pickup deadline and every rider's detour.
 5. Choose the feasible trip with the smallest added estimated duration; otherwise check a solo route or leave the request pending.
 6. Persist routes, confirmed booking associations and initial driver offers in one transaction. No eligible driver leaves a planned trip visible for inspection/retry.
 
-Only the cheapest insertion per trip is checked: a more expensive feasible alternative may be missed. This is not a global optimum. Random trip UUIDs also affect equal-cost ties across fresh runs. See [strategy](docs/batching-strategy.md) and [complexity](docs/algorithm-analysis.md).
+The search checks alternative insertions while preserving existing stop order. This greedy choice is not a global optimum. Random trip UUIDs also affect equal-cost ties across fresh runs. See [strategy](docs/batching-strategy.md) and [complexity](docs/algorithm-analysis.md).
 
 ## Correctness and concurrency
 
 - **Duplicates:** a partial unique index protects active keys. `INSERT … ON CONFLICT DO NOTHING` preserves a usable creation transaction; a duplicate returns the existing booking.
 - **Competing batch workers:** locked rows are skipped; trip persistence and booking confirmation commit or roll back together.
 - **Route mutations:** creation/insertion are atomic. Insertion and cancellation lock booking before trip; insertion reloads and rechecks current riders/state.
-- **Driver assignment:** acceptance locks trip, offer and driver, then rechecks eligibility and actual seat capacity. Offer creation and responses serialize on the trip; only one live offer is returned. Acceptance at/after expiry fails, and driver versions reject stale detached updates.
+- **Driver assignment:** acceptance locks trip, offer and driver, then rechecks eligibility and actual seat capacity, current pickup SLA/detour and driver approach. Offer creation and responses serialize on the trip; only one live offer is returned. Acceptance at/after expiry fails, and driver versions reject stale detached updates.
 - **Lifecycle:** pickup requires the accepted driver and next route stop. The first pickup closes cancellation for the entire trip. Execution and cancellation serialize on the trip; one OPEN escalation per booking/reason is enforced by a partial unique index.
 - **Stored invariants:** foreign keys and deferred stop uniqueness protect committed state. Empty-trip cancellation releases its driver and expires outstanding offers.
 
@@ -105,7 +105,7 @@ On PowerShell use `./mvnw.cmd clean verify`. This runs the full suite and packag
 | --- | --- |
 | [Requirements traceability](docs/requirements-traceability.md), [test matrix](docs/test-matrix.md) | Implementation claims, assertions and coverage gaps |
 | [Architecture](docs/architecture.md), [domain model](docs/domain-model.md), [booking lifecycle](docs/booking-lifecycle.md) | Responsibilities, request flow and reachable states |
-| [Batching strategy](docs/batching-strategy.md), [algorithm analysis](docs/algorithm-analysis.md) | Search, feasibility and computational cost |
+| [Batching strategy](docs/batching-strategy.md), [algorithm analysis](docs/algorithm-analysis.md), [planner and ETA decisions](docs/planner-and-eta.md) | Search, feasibility and computational cost |
 | [API contract](docs/api-design.md), [dispatch workflow](docs/dispatch-workflow.md), [local development](docs/local-development.md) | Actual endpoints, offer outcomes, startup and provisioning boundaries |
 | [Assumptions](docs/assumptions.md), [failure modes](docs/failure-modes.md) | Policy choices, approximations and operational limits |
 | [Deduplication](docs/decisions/0005-handle-booking-deduplication.md), [clustering](docs/decisions/0006-request-clustering.md), [caching](docs/decisions/007-zone-caching.md) | Design rationale and trade-offs |
@@ -115,9 +115,9 @@ Source lives in `src/main`, tests in `src/test`, and optional JMH source in `src
 ## Known limitations
 
 - Claim limits and competing workers can fragment clusters into extra trips. The urgency guard does not guarantee service under overload or downtime; expired requests are escalated but still need a service remedy. Late-insertion candidate scans remain unbounded.
-- ETA uses straight-line distance, fixed speed/circuity and dwell; driver approach and live road/traffic data are absent. Computed SLA acceptance does not guarantee actual pickup time.
+- ETA uses straight-line distance, fixed speed/circuity and dwell; offering and acceptance include approach from stored driver position, but live road/traffic data are absent. Computed SLA acceptance does not guarantee actual pickup time.
 - No driver authentication/notification transport or manual escalation-resolution API. Dispatch and pickup/dropoff HTTP operations are explicitly admin simulations; offers do not reserve drivers. Late insertion supports planned trips only.
-- Dispatch checks current capacity/eligibility and offer expiry, but does not recompute pickup SLA/detour after waiting for a response. Driver approach and offer waiting are absent from route ETA.
+- Unassigned planning starts optimistically at the first pickup. Offering and new acceptance recheck driver approach, current time and route constraints; no automatic route splitting/recovery occurs when dispatch finds no feasible driver.
 - Cancellation preserves remaining stop order, recomputes estimated arrivals and flags missed pickup deadlines; execution-time cancellation and new route optimization are unsupported. Zone caching has no cross-instance/direct-SQL invalidation.
 - Actuator metrics are public under the assessment policy. No backup/restore validation, load guarantee or deployment stack is supplied. Existing invalid legacy data must be repaired explicitly before migrations V11/V14.
 

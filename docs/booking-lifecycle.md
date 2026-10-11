@@ -45,7 +45,7 @@ Cancellation remains `DELETE /api/v1/bookings/{id}` with the owning `X-Employee-
 
 ## Cancellation timing and isolation
 
-Before execution, remove both cancelled stops, preserve the remaining stop order, resequence from one, and recompute every remaining stop's persisted `estimatedArrivalAt`. Recalculation starts at the later of the current batching clock and the trip's original planning start. The first pickup is at that start; each later arrival adds the existing estimator's travel/dwell duration. This is the same simplified timing convention as the pickup constraint, including its absence of driver approach time.
+Before execution, remove both cancelled stops, preserve the remaining stop order, resequence from one, and recompute every remaining stop's persisted `estimatedArrivalAt`. Recalculation starts at the later of the current batching clock and the trip's original planning start. For an accepted trip, reload/lock its driver and add its approach to the new first pickup; an unassigned trip stays optimistic at that start. Later arrivals add the existing estimator's travel/dwell duration. Capacity and detour are rechecked; violations return 409 ROUTE_INFEASIBLE and roll back cancellation. See [assignment timing](planner-and-eta.md).
 
 The remaining pickups are checked against their own stored deadlines. A late estimate creates one OPEN booking issue with reason `Replanned pickup estimate exceeds the booking deadline`; a subsequent feasible recalculation resolves that issue. Cancelling the affected booking also resolves its automatic issues. Risk records remain inspectable until one of those remedies; simulated pickup/dropoff is not an escalation-resolution action. There is no automatic reassignment or deadline extension.
 
@@ -53,7 +53,7 @@ An empty trip becomes CANCELLED, expires outstanding offers and releases its ass
 
 ## A pickup promise impossible even alone
 
-Under the current planner, a solo pickup occurs at the captured cycle time: there is no approach leg. Thus `pickupSlaDeadline < cycleTime` is already impossible even alone; equality still passes. Every batch cycle separately claims at most `app.batching.max-bookings-per-cycle` such expired, unassociated PENDING bookings that have no matching OPEN issue, using `FOR UPDATE SKIP LOCKED`.
+Under unassigned planning, solo pickup occurs at the captured cycle time without a driver approach leg. Offering/new acceptance separately recheck approach and current time. Thus `pickupSlaDeadline < cycleTime` is already impossible even alone; equality still passes. Every batch cycle separately claims at most `app.batching.max-bookings-per-cycle` such expired, unassociated PENDING bookings that have no matching OPEN issue, using `FOR UPDATE SKIP LOCKED`.
 
 It persists reason `Pickup deadline cannot be met even by a solo trip` and leaves the booking PENDING without a trip. A separate bounded pass protects the normal eligible-request budget from an expired backlog. The existing batch response counts **eligible planning claims only**, so zero considered can still mean escalation work occurred. Inspect `/api/v1/escalations/open` as ADMIN or APPROVER.
 

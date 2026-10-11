@@ -27,7 +27,7 @@ public class DispatchAdminController {
     public DispatchView get(@PathVariable UUID tripId) { return dispatch.getTrip(tripId); }
 
     @PostMapping("/trips/{tripId}/advance")
-    @Operation(summary = "Advance dispatch or retry after no eligible driver", description = "Admin only; no body. Returns an existing live offer without duplicating it, expires overdue/ineligible offers, or tries the nearest untried eligible driver. Maximum three offers per trip by default; attempted drivers never repeat. Cancelled/assigned trips return their current outcome.")
+    @Operation(summary = "Advance dispatch or retry after no eligible driver", description = "Admin only; no body. Retains a live offer while its driver and route still fit, retires overdue/ineligible/infeasible offers, or tries the nearest untried eligible driver whose approach and route meet constraints. Maximum three offers per trip by default; attempted drivers never repeat. Cancelled/assigned trips return their current outcome.")
     public DispatchView advance(@PathVariable UUID tripId) { return dispatch.advanceTrip(tripId); }
 
     @PostMapping("/offers/{offerId}/reject")
@@ -35,7 +35,7 @@ public class DispatchAdminController {
     public DispatchView reject(@PathVariable UUID offerId) { return dispatch.rejectOffer(offerId); }
 
     @PostMapping("/offers/{offerId}/accept")
-    @Operation(summary = "Simulate the offered driver's acceptance", description = "Admin only; no body. Uses the driver already bound to the stored offer, locks trip/offer/driver and rechecks eligibility, expiry and capacity before committing assignment. Returns the trip outcome. Cancelled trips or conflicting driver assignments return 409 STATE_CONFLICT; overdue offers return 409 OFFER_EXPIRED and expiry processing commits. An active accepted assignment can be retried safely.")
+    @Operation(summary = "Simulate the offered driver's acceptance", description = "Admin only; no body. Uses the driver bound to the stored offer, locks trip/offer/driver, then rechecks expiry, eligibility, actual seats, pickup SLA and detour using current time and current driver approach. Successful assignment persists refreshed stop estimates. A live offer can return 409 ROUTE_INFEASIBLE with a constraint code even before expiry; this leaves assignment and estimates unchanged. Advance can retire it and try another driver. Cancelled trips or conflicting assignments return 409 STATE_CONFLICT; overdue offers return 409 OFFER_EXPIRED and expiry processing commits. Retrying an active accepted assignment returns its state without retimestamping estimates.")
     public DispatchView accept(@PathVariable UUID offerId) {
         return dispatch.acceptOffer(offerId);
     }

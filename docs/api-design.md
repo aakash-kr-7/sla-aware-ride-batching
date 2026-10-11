@@ -63,7 +63,7 @@ All five operations require ADMIN. No employee header, driver ID or request body
 | POST | `/api/admin/dispatch/offers/{offerId}/reject` | Reject and automatically consider next driver |
 | POST | `/api/admin/dispatch/offers/{offerId}/accept` | Commit assignment after locked rechecks; return trip view |
 
-`DispatchView` contains `tripId`, `tripStatus`, `assignedDriverId`, `peakPassengers`, `outcome`, `activeOfferId`, `attemptsUsed`, `attemptLimit`, `offers` and `stops`. Offer items include ID, stored driver ID, status and created/expiry/updated timestamps; stops include sequence, booking ID, type, location and `estimatedArrivalAt` (nullable for legacy routes). These views avoid serializing managed entities. Peak passengers is occupancy, not vehicle capacity. Outcomes, expiry semantics and reproduction commands are [documented here](dispatch-workflow.md).
+`DispatchView` contains `tripId`, `tripStatus`, `assignedDriverId`, `peakPassengers`, `outcome`, `activeOfferId`, `attemptsUsed`, `attemptLimit`, `offers` and `stops`. Offer items include ID, stored driver ID, status and created/expiry/updated timestamps; stops include sequence, booking ID, type, location and `estimatedArrivalAt` (nullable for legacy routes). These views avoid serializing managed entities. Peak passengers is occupancy, not vehicle capacity. New acceptance recalculates arrivals using current driver approach and repeats route constraints; planning/pending-offer estimates are optimistic. Outcomes and [ETA/revalidation policy](planner-and-eta.md) define the distinction.
 
 ## Admin execution simulation
 
@@ -79,6 +79,8 @@ Both require ADMIN, take no body and use the accepted driver already stored on t
 The global handler maps missing booking to 404 (`BOOKING_NOT_FOUND`), unserviceable pickup to 422 (`UNSERVICEABLE_ZONE`) and DTO validation to 400 (`VALIDATION_ERROR`). Responses contain `code`, `message`, `timestamp`, `path`. Invalid/expired JWTs return 401 using that shape. Missing authentication returns 403 through Spring Security. Role/ownership denials return 403; controller advice emits `FORBIDDEN` with a generic message.
 
 Missing trip/offer returns 404 `DISPATCH_NOT_FOUND`. Acceptance/rejection at offer expiry returns 409 `OFFER_EXPIRED`; the expiry transition and next offer intentionally commit despite that response. Cancelled-trip or unavailable-driver acceptance returns 409 `STATE_CONFLICT`.
+
+A stored route that fails new assignment or cancellation capacity/detour checks returns 409 ROUTE_INFEASIBLE with a controlled constraint code in the message, e.g. PICKUP_SLA or RELATIVE_DETOUR. Failed new acceptance retains the offer without assigning or changing estimates; Advance can retire it and consider another feasible driver.
 
 Login failure is plain text. Invalid arguments return 400 (`INVALID_REQUEST`); explicit domain transitions and optimistic/pessimistic lock conflicts return 409 (`STATE_CONFLICT`). Conflict responses do not echo database details. Unexpected internal failures remain server errors. The JWT filter handles only token/account authentication errors; it does not relabel downstream failures. See [failure modes](failure-modes.md).
 

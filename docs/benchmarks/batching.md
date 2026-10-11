@@ -1,6 +1,6 @@
 # Batching Algorithm Benchmark Results
 
-Historical measurements recorded on 2026-10-10, before the repository hygiene pass and infeasible-solo fix. They have not been remeasured for the current revision. Do not treat them as current latency guarantees.
+Historical measurements recorded on 2026-10-10, before the repository hygiene pass, infeasible-solo fix and cheapest-feasible insertion search. They have not been remeasured for the current revision. Do not treat them as current latency guarantees.
 
 ## Reproduce
 
@@ -39,7 +39,7 @@ This compiles sources and runs the JMH harness, skipping ordinary JUnit executio
 The recorded averages increase with cluster size, consistent with the growing candidate search described in [algorithm analysis](../algorithm-analysis.md). Error margins are broad, especially for 250 requests. These synthetic, in-memory results do not establish an end-to-end latency budget, bounded route length or production capacity. They do not justify an architectural change during repository cleanup.
 
 ## Limitations
-The trial reuses mutable Booking objects whose trip IDs the planner changes; input reset and repeatability should be reviewed before recording new measurements. The harness does not invoke runtime window/clustering orchestration.
+The trial reuses mutable Booking objects whose trip IDs the planner changes; input reset and repeatability should be reviewed before recording new measurements. The harness does not invoke runtime window/clustering orchestration or driver approach/assignment validation.
 
 1. **CPU/Platform Variance**: Tested locally on a single machine. Cloud deployments may have different single-thread performance characteristics.
 2. **Missing Network/DB Latency**: This benchmark isolates the pure algorithms. The harness excludes JPA reads/writes and pessimistic row locks, so their effect on end-to-end latency is unmeasured.

@@ -32,7 +32,7 @@ flowchart TD
     Window --> Cluster[Group by active pickup zone and leader direction]
     Cluster --> Sort[Sort each cluster by pickup deadline, then booking UUID]
     Sort --> Next[Consider next booking]
-    Next --> Search[Find minimum-cost insertion for each candidate trip]
+    Next --> Search[Search insertion alternatives for each candidate trip]
     Search --> Check[Check structure, capacity, pickup SLA and detour]
     Check -->|At least one feasible| Shared[Select smallest incremental cost and assign]
     Check -->|None feasible| Solo[Evaluate pickup/dropoff-only route]
@@ -53,7 +53,7 @@ Scheduling is disabled by default. The admin trigger runs one cycle; an enabled 
 
 [RouteInsertionPlanner](../src/main/java/com/ridebatching/trip/RouteInsertionPlanner.java) preserves the existing relative stop order. For S existing stops it enumerates `(S+1)(S+2)/2` pairs: pickup index 0..S, then dropoff index strictly after pickup. It constructs each candidate and sums estimated durations between adjacent stops. The lowest total cost wins; ties retain earliest pickup, then earliest dropoff positions.
 
-The insertion component does not know deadlines or capacity. [BatchPlanner](../src/main/java/com/ridebatching/batching/BatchPlanner.java) checks only the single cheapest route per trip, using [TripFeasibilityEvaluator](../src/main/java/com/ridebatching/batching/evaluator/TripFeasibilityEvaluator.java):
+The insertion component accepts a feasibility predicate without owning domain rules. [BatchPlanner](../src/main/java/com/ridebatching/batching/BatchPlanner.java) checks alternatives and retains the cheapest feasible route per trip, using [TripFeasibilityEvaluator](../src/main/java/com/ridebatching/batching/evaluator/TripFeasibilityEvaluator.java):
 
 | Check | Acceptance rule |
 | --- | --- |
@@ -62,9 +62,9 @@ The insertion component does not know deadlines or capacity. [BatchPlanner](../s
 | Pickup SLA | Estimated pickup <= stored deadline for every booking; equality is accepted |
 | Detour | For each rider, extra in-vehicle time <= both absolute limit and relative limit times direct estimated duration |
 
-Checks short-circuit at the first rejection and return a trace containing the constraint code and affected booking where applicable. If the cheapest route fails, a more expensive feasible insertion is not searched. A dedicated route is evaluated too; an expired SLA stays pending rather than being assigned a knowingly infeasible trip.
+Checks short-circuit at the first rejection and return a trace containing the constraint code and affected booking where applicable. All legal insertion positions are costed; once a feasible cost is known, equally or more expensive candidates cannot improve it and skip constraint evaluation. Candidates stream through O(S) temporary space. A dedicated route is evaluated too; an expired SLA stays pending rather than being assigned a knowingly infeasible trip.
 
-Pickup ETA starts at route-start time at the first pickup. Subsequent legs include travel and destination dwell; driver approach and initial dwell are absent. Detour measures pickup-to-dropoff duration using the same estimator for the direct baseline. If direct duration is zero, any non-zero detour fails the relative check. Runtime limits and approximation choices belong in [assumptions](assumptions.md).
+Unassigned planning/insertion ETA starts at captured route-start time at the first pickup. Subsequent legs include travel and destination dwell. Offering and acceptance shift that start by current-time driver approach, without initial dwell; [ETA policy](planner-and-eta.md) defines the exact checks. Detour measures pickup-to-dropoff duration using the same estimator for the direct baseline. If direct duration is zero, any non-zero detour fails the relative check. Runtime limits and approximation choices belong in [assumptions](assumptions.md).
 
 ## Window and clustering implementation
 
@@ -101,4 +101,4 @@ flowchart TD
     Timing --> Commit
 ```
 
-This implements localized stop removal, not a fresh route optimization. Unrelated trips are untouched. Cancellation is state-idempotent, rejects executing/completed trips even for a CONFIRMED rider, retains the booking's trip ID, and expires outstanding offers/releases the matching driver when the trip becomes empty. Before execution, remaining estimated arrivals are recalculated and missed pickup promises are escalated. Execution-time cancellation is unsupported. See [timing assumptions and evidence](booking-lifecycle.md). Without road-metric assumptions, deleting a stop is not proof that every remaining ETA improves. [Tests](test-matrix.md) verify isolation, concurrent mutation and empty-trip cleanup; they do not establish complete execution-time replanning.
+This implements localized stop removal, not a fresh route optimization. Unrelated trips are untouched. Cancellation is state-idempotent, rejects executing/completed trips even for a CONFIRMED rider, retains the booking's trip ID, and expires outstanding offers/releases the matching driver when the trip becomes empty. Before execution, remaining estimates are recalculated, including current driver approach for accepted trips; actual/planning seats and detour are rechecked, and missed pickup promises are escalated. Execution-time cancellation is unsupported. See [timing assumptions and evidence](booking-lifecycle.md). Without road-metric assumptions, deleting a stop is not proof that every remaining ETA improves. [Tests](test-matrix.md) verify isolation, concurrent mutation and empty-trip cleanup; they do not establish complete execution-time replanning.

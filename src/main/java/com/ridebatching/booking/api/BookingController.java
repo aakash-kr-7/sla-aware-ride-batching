@@ -55,7 +55,7 @@ public class BookingController {
     }
 
     @org.springframework.web.bind.annotation.DeleteMapping("/{id}")
-    @Operation(summary = "Cancel a booking and update its affected trip", description = "Changes data. Cancels PENDING bookings or CONFIRMED bookings only before any pickup in their trip. Removes pickup/dropoff stops, resequences and recomputes remaining arrival estimates; flags remaining missed pickup deadlines. Once execution starts, returns 409 STATE_CONFLICT even for an unpicked rider. Repeat cancellation is idempotent. Unrelated trips are retained. The employee header must identify the booking owner, including for an admin. This is stop removal/resequencing, not a new route optimization.")
+    @Operation(summary = "Cancel a booking and update its affected trip", description = "Changes data. Cancels PENDING bookings or CONFIRMED bookings only before any pickup in their trip. Removes stops, resequences and recomputes remaining estimates, including current driver approach for an accepted trip. Capacity/detour violations return 409 ROUTE_INFEASIBLE and roll back; missed remaining pickup promises are escalated. Once execution starts, returns 409 STATE_CONFLICT even for an unpicked rider. Repeat cancellation is idempotent. Unrelated trips are retained. The employee header must identify the booking owner, including for an admin. This preserves remaining stop order rather than optimizing a new route.")
     @PreAuthorize("hasRole('ADMIN') or #employeeId == authentication.principal.employeeId")
     public BookingResponse cancelBooking(
             @Parameter(description = "UUID of the employee who owns this booking; non-admin callers must also match their account.")

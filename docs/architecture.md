@@ -83,7 +83,7 @@ sequenceDiagram
         S->>DB: Set EXPIRED; try next driver within attempt limit
     else Admin simulates acceptance
         B->>S: acceptOffer(activeOfferId)
-        S->>DB: Lock trip, offer and driver; recheck expiry/capacity/eligibility
+        S->>DB: Lock trip, offer and driver; recheck expiry/eligibility and route feasibility with current approach
         S->>DB: Commit accepted offer and matching trip/driver assignment
     end
 ```
@@ -94,7 +94,7 @@ Driver status remains `AVAILABLE` after assignment; `activeTripId` excludes it f
 
 - **Spring Boot monolith, feature packages:** one process keeps booking/trip transaction boundaries inspectable. It shares CPU, memory and DB connections between HTTP and planning; no load guarantee follows from that choice.
 - **PostgreSQL + Flyway + JPA:** database indexes and row locks arbitrate races; migrations own schema, Hibernate validates it. This avoids correctness depending on a process-local lock or cache. Tests use actual PostgreSQL 16 via Testcontainers, not H2.
-- **Greedy insertion + separate constraints:** small components expose why a route is accepted or rejected. Local cost choices are inspectable, but do not find a global optimum or every feasible insertion. See [planning strategy](batching-strategy.md).
+- **Greedy insertion + separate constraints:** small components expose why a route is accepted or rejected. The search considers every legal insertion position and selects its cheapest feasible route; greedy grouping and preserved existing order do not establish a global optimum. See [planning strategy](batching-strategy.md).
 - **Caffeine for zones only:** zone reads are frequent and the data changes less often than trip state. Freshness is TTL-bounded; mutable booking/assignment guarantees stay in PostgreSQL. See [cache decision](decisions/007-zone-caching.md).
 - **Explicit transaction boundaries:** duplicates need a usable transaction after a losing insert; see [dedup decision](decisions/0005-handle-booking-deduplication.md). Batching, cancellation and acceptance each coordinate their own changes.
 
