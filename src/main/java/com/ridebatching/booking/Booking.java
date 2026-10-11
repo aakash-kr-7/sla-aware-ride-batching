@@ -91,7 +91,7 @@ public class Booking {
             return; // Idempotent
         }
         if (this.status != BookingStatus.PENDING && this.status != BookingStatus.CONFIRMED) {
-            throw new IllegalStateException("Booking cannot be cancelled from status: " + this.status);
+            throw new com.ridebatching.api.DomainConflictException("Booking cannot be cancelled from status: " + this.status);
         }
         
         this.status = BookingStatus.CANCELLED;

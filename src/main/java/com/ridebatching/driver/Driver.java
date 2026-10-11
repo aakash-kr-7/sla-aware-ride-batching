@@ -61,7 +61,7 @@ public class Driver {
 
     public void goOnline() {
         if (this.status != DriverStatus.OFFLINE) {
-            throw new IllegalStateException("Driver must be OFFLINE to go ONLINE");
+            throw new com.ridebatching.api.DomainConflictException("Driver must be OFFLINE to go ONLINE");
         }
         this.status = DriverStatus.AVAILABLE;
         this.updatedAt = Instant.now();
@@ -69,7 +69,7 @@ public class Driver {
 
     public void goOffline() {
         if (this.activeTripId != null) {
-            throw new IllegalStateException("Cannot go OFFLINE while assigned to an active trip");
+            throw new com.ridebatching.api.DomainConflictException("Cannot go OFFLINE while assigned to an active trip");
         }
         this.status = DriverStatus.OFFLINE;
         this.updatedAt = Instant.now();
@@ -77,10 +77,10 @@ public class Driver {
 
     public void startBreak() {
         if (this.status != DriverStatus.AVAILABLE) {
-            throw new IllegalStateException("Driver must be AVAILABLE to start a break");
+            throw new com.ridebatching.api.DomainConflictException("Driver must be AVAILABLE to start a break");
         }
         if (this.activeTripId != null) {
-            throw new IllegalStateException("Cannot start break while assigned to an active trip");
+            throw new com.ridebatching.api.DomainConflictException("Cannot start break while assigned to an active trip");
         }
         this.status = DriverStatus.ON_BREAK;
         this.updatedAt = Instant.now();
@@ -88,7 +88,7 @@ public class Driver {
 
     public void endBreak() {
         if (this.status != DriverStatus.ON_BREAK) {
-            throw new IllegalStateException("Driver is not on a break");
+            throw new com.ridebatching.api.DomainConflictException("Driver is not on a break");
         }
         this.status = DriverStatus.AVAILABLE;
         this.updatedAt = Instant.now();
@@ -99,10 +99,10 @@ public class Driver {
             return;
         }
         if (this.status != DriverStatus.AVAILABLE) {
-            throw new IllegalStateException("Driver must be AVAILABLE to be assigned a trip");
+            throw new com.ridebatching.api.DomainConflictException("Driver must be AVAILABLE to be assigned a trip");
         }
         if (this.activeTripId != null) {
-            throw new IllegalStateException("Driver is already assigned to a trip");
+            throw new com.ridebatching.api.DomainConflictException("Driver is already assigned to a trip");
         }
         this.activeTripId = tripId;
         this.updatedAt = Instant.now();
@@ -110,7 +110,7 @@ public class Driver {
 
     public void completeTrip() {
         if (this.activeTripId == null) {
-            throw new IllegalStateException("Driver has no active trip to complete");
+            throw new com.ridebatching.api.DomainConflictException("Driver has no active trip to complete");
         }
         this.activeTripId = null;
         this.updatedAt = Instant.now();

@@ -105,7 +105,7 @@ public class BookingService {
             log.info("Deduplication hit for employee dedup key");
             return bookingRepository.findByDeduplicationKeyAndStatusNot(dedupKey, BookingStatus.CANCELLED)
                 .map(this::mapToResponse)
-                .orElseThrow(() -> new IllegalStateException("Booking changed during duplicate submission"));
+                .orElseThrow(() -> new com.ridebatching.api.DomainConflictException("Booking changed during duplicate submission"));
         }
 
         Booking saved = bookingRepository.findById(booking.getId()).orElseThrow();
@@ -126,7 +126,7 @@ public class BookingService {
             .orElseThrow(() -> new BookingNotFoundException("Booking not found with id: " + bookingId));
             
         if (!booking.getEmployee().getId().equals(employeeId)) {
-            throw new IllegalArgumentException("Booking does not belong to the requested employee");
+            throw new org.springframework.security.access.AccessDeniedException("Booking does not belong to the requested employee");
         }
         
         booking.cancel();

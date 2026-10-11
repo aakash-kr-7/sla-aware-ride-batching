@@ -23,6 +23,9 @@ import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -163,6 +166,46 @@ class SecurityMethodIntegrationTest extends AbstractPostgresIntegrationTest {
     void approverCannotTriggerBatching() throws Exception {
         mockMvc.perform(post("/api/admin/batching/trigger")
                 .header("Authorization", tokenApprover))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void employeeCannotCancelAnotherBookingUsingTheirOwnHeader() throws Exception {
+        mockMvc.perform(delete("/api/v1/bookings/" + bookingEmp1Id)
+                .header("Authorization", tokenEmp2).header("X-Employee-Id", emp2Id))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("FORBIDDEN"));
+        assertThat(bookingRepository.findById(bookingEmp1Id).orElseThrow().getStatus()).isEqualTo(BookingStatus.PENDING);
+    }
+
+    @Test
+    void employeeCannotForgeCancellationEmployeeHeader() throws Exception {
+        mockMvc.perform(delete("/api/v1/bookings/" + bookingEmp1Id)
+                .header("Authorization", tokenEmp2).header("X-Employee-Id", emp1Id))
+                .andExpect(status().isForbidden());
+        assertThat(bookingRepository.findById(bookingEmp1Id).orElseThrow().getStatus()).isEqualTo(BookingStatus.PENDING);
+    }
+
+    @Test
+    void invalidCancellationStateReturnsConflictWithoutChangingBooking() throws Exception {
+        Booking booking = bookingRepository.findById(bookingEmp1Id).orElseThrow();
+        booking.setStatus(BookingStatus.DROPPED);
+        bookingRepository.saveAndFlush(booking);
+        mockMvc.perform(delete("/api/v1/bookings/" + bookingEmp1Id)
+                .header("Authorization", tokenEmp1).header("X-Employee-Id", emp1Id))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("STATE_CONFLICT"))
+                .andExpect(jsonPath("$.message").value("Request conflicts with the current state"));
+        assertThat(bookingRepository.findById(bookingEmp1Id).orElseThrow().getStatus()).isEqualTo(BookingStatus.DROPPED);
+    }
+
+    @Test
+    void invalidJwtIsRejectedWithoutLeakingParserDetails() throws Exception {
+        mockMvc.perform(get("/api/v1/bookings/" + bookingEmp1Id).header("Authorization", "Bearer malformed"))
+                .andExpect(status().isUnauthorized()).andExpect(jsonPath("$.message").value("Invalid or expired token"));
+    }
+
+    @Test
+    void employeeCannotTriggerAdminBatching() throws Exception {
+        mockMvc.perform(post("/api/admin/batching/trigger").header("Authorization", tokenEmp1))
                 .andExpect(status().isForbidden());
     }
 }

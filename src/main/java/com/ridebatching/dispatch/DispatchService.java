@@ -114,13 +114,13 @@ public class DispatchService {
         if (offer.getStatus() == DriverOfferStatus.ACCEPTED) {
             if (trip.getStatus() == TripStatus.DISPATCHED && driver.getId().equals(trip.getDriverId())
                     && trip.getId().equals(driver.getActiveTripId())) return;
-            throw new IllegalStateException("Accepted offer no longer has an active assignment");
+            throw new com.ridebatching.api.DomainConflictException("Accepted offer no longer has an active assignment");
         }
         requirePlanned(trip);
         if (!eligibilityPolicy.evaluate(driver).isEligible()
                 || driver.getVehicleCapacity() < trip.getPeakPassengers()
                 || coolOffPolicy.isExcludedByCoolOff(driver.getId(), trip.getId(), Instant.now())) {
-            throw new IllegalStateException("Driver is no longer eligible for this trip");
+            throw new com.ridebatching.api.DomainConflictException("Driver is no longer eligible for this trip");
         }
         offer.accept();
         trip.assignTo(driver.getId());
@@ -142,7 +142,7 @@ public class DispatchService {
         // Join cancellation's transaction and lock the persisted trip before releasing any assignments.
         Trip trip = lockTrip(tripId);
         if (trip.getStatus() != TripStatus.CANCELLED) {
-            throw new IllegalStateException("Only cancelled trips can release assignments");
+            throw new com.ridebatching.api.DomainConflictException("Only cancelled trips can release assignments");
         }
         for (DriverOffer reference : offerRepository.findByTripId(trip.getId())) {
             DriverOffer offer = offerRepository.findByIdForUpdate(reference.getId()).orElseThrow();
@@ -158,7 +158,7 @@ public class DispatchService {
 
     private void requirePlanned(Trip trip) {
         if (trip.getStatus() != TripStatus.PLANNED) {
-            throw new IllegalStateException("Only planned trips can receive new driver assignments");
+            throw new com.ridebatching.api.DomainConflictException("Only planned trips can receive new driver assignments");
         }
     }
 }

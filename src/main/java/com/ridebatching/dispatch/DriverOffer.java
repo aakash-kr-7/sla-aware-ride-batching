@@ -50,7 +50,7 @@ public class DriverOffer {
             return;
         }
         if (this.status != DriverOfferStatus.OFFERED) {
-            throw new IllegalStateException("Only OFFERED offers can be accepted");
+            throw new com.ridebatching.api.DomainConflictException("Only OFFERED offers can be accepted");
         }
         this.status = DriverOfferStatus.ACCEPTED;
         this.updatedAt = Instant.now();
@@ -61,7 +61,7 @@ public class DriverOffer {
             return;
         }
         if (this.status != DriverOfferStatus.OFFERED) {
-            throw new IllegalStateException("Only OFFERED offers can be rejected");
+            throw new com.ridebatching.api.DomainConflictException("Only OFFERED offers can be rejected");
         }
         this.status = DriverOfferStatus.REJECTED;
         this.updatedAt = Instant.now();
@@ -69,7 +69,7 @@ public class DriverOffer {
 
     public void expire() {
         if (this.status != DriverOfferStatus.OFFERED) {
-            throw new IllegalStateException("Only OFFERED offers can expire");
+            throw new com.ridebatching.api.DomainConflictException("Only OFFERED offers can expire");
         }
         this.status = DriverOfferStatus.EXPIRED;
         this.updatedAt = Instant.now();

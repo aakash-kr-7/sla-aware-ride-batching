@@ -19,6 +19,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.time.Instant;
+import io.jsonwebtoken.JwtException;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
@@ -44,6 +46,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         try {
             final String jwt = authHeader.substring(7);
             final String username = jwtService.extractUsername(jwt);
+            if (username == null || username.isBlank()) throw new JwtException("Missing subject");
 
             if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 UserDetails userDetails = this.userDetailsService.loadUserByUsername(username);
@@ -56,15 +59,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     );
                     authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authToken);
+                } else {
+                    throw new JwtException("Invalid claims");
                 }
             }
-            filterChain.doFilter(request, response);
-        } catch (Exception ex) {
-            handleAuthenticationError(response, request.getRequestURI(), ex.getMessage());
+        } catch (JwtException | UsernameNotFoundException | IllegalArgumentException ex) {
+            SecurityContextHolder.clearContext();
+            handleAuthenticationError(response, request.getRequestURI());
+            return;
         }
+        filterChain.doFilter(request, response);
     }
 
-    private void handleAuthenticationError(HttpServletResponse response, String uri, String message) throws IOException {
+    private void handleAuthenticationError(HttpServletResponse response, String uri) throws IOException {
         response.setStatus(HttpStatus.UNAUTHORIZED.value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
 

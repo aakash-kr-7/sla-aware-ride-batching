@@ -65,7 +65,7 @@ public class Trip {
             return;
         }
         if (this.status != TripStatus.PLANNED) {
-            throw new IllegalStateException("Trip is already assigned or cannot be assigned. Status: " + this.status);
+            throw new com.ridebatching.api.DomainConflictException("Trip is already assigned or cannot be assigned. Status: " + this.status);
         }
         this.status = TripStatus.DISPATCHED;
         this.driverId = driverId;
