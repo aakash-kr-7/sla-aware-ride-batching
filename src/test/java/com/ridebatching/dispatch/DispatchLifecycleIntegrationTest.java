@@ -13,12 +13,14 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.when;
 
+@org.springframework.boot.test.context.SpringBootTest(properties = "dispatch.expiry-scheduling.max-trips-per-cycle=1")
 class DispatchLifecycleIntegrationTest extends AbstractPostgresIntegrationTest {
     private static final Instant NOW = Instant.parse("2026-10-11T10:00:00Z");
     @Autowired DispatchService dispatch;
     @Autowired DriverRepository drivers;
     @Autowired DriverOfferRepository offers;
     @Autowired TripRepository trips;
+    @Autowired DispatchExpiryJob expiry;
     @MockBean(name = "dispatchClock") Clock clock;
     private UUID tripId;
 
@@ -83,6 +85,19 @@ class DispatchLifecycleIntegrationTest extends AbstractPostgresIntegrationTest {
         assertThat(state.outcome()).isEqualTo(DispatchOutcome.ATTEMPT_LIMIT_REACHED);
         assertThat(dispatch.advanceTrip(tripId).attemptsUsed()).isEqualTo(3);
         assertThat(offers.findByTripId(tripId)).extracting(DriverOffer::getDriverId).doesNotHaveDuplicates();
+    }
+
+    @Test void expiryJobBoundsItsCycleAndEventuallyAdvancesEveryDueTrip() {
+        driver(1); driver(2);
+        UUID otherTrip = trips.saveAndFlush(new Trip(UUID.randomUUID(), NOW, NOW)).getId();
+        dispatch.advanceTrip(tripId); dispatch.advanceTrip(otherTrip);
+        when(clock.instant()).thenReturn(NOW.plusSeconds(120));
+        assertThat(expiry.advanceExpiredOffers()).isEqualTo(1);
+        assertThat(expiry.advanceExpiredOffers()).isEqualTo(1);
+        assertThat(expiry.advanceExpiredOffers()).isZero();
+        assertThat(offers.findAll()).filteredOn(o -> o.getStatus() == DriverOfferStatus.EXPIRED).hasSize(2);
+        assertThat(dispatch.getTrip(tripId).attemptsUsed()).isEqualTo(2);
+        assertThat(dispatch.getTrip(otherTrip).attemptsUsed()).isEqualTo(2);
     }
 
     private Driver driver(double latitude) {

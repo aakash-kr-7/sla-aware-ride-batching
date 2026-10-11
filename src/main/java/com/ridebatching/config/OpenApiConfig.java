@@ -24,8 +24,9 @@ public class OpenApiConfig {
                                 2. Copy the response's `token` value. Click **Authorize**, paste the token without quotes or a `Bearer` prefix, then **Authorize > Close**.
                                 3. Open **Employee (Bookings) > List an employee's bookings**. Supply the existing employee's UUID as `X-Employee-Id`; it must match your account unless you are an admin.
                                 4. To create a booking, supply pickup/dropoff coordinates. The pickup must be inside a configured active service zone. The server assigns the time slot, pickup deadline and status.
-                                5. For pending bookings, log in as an admin, replace the authorized token and execute **Admin (Batching) > Plan trips for pending bookings**.
+                                5. For pending bookings, log in as an admin, replace the authorized token and execute **Admin (Batching) > Plan trips and offer eligible drivers**.
                                 6. Retrieve the booking by its returned `id`. `CONFIRMED` with a `tripId` means it joined a trip; it does not mean the passenger was picked up.
+                                7. In **Admin (Dispatch simulation)**, list trips to inspect routes, seat occupancy and offer history. Copy the `activeOfferId` into **Simulate the offered driver's rejection** to see the next driver considered, then accept the new offer. These admin operations simulate the response of the driver stored on the offer; there is no driver identity input or driver login.
 
                                 **Buttons:** endpoint rows expand instructions; **Try it out** enables editing; **Execute** sends the request; **Server response** shows the actual result. **Example Value** only describes the input shape.
 
@@ -35,7 +36,7 @@ public class OpenApiConfig {
                                 ### Current boundaries
                                 Startup does not create employee, zone or driver records. Replace examples with configured data. Repeated logical bookings return the existing booking; creating a booking may immediately insert it into an existing planned trip.
 
-                                A batching response contains cycle counts, not full routes or total queue counts. Zero considered can mean saved requests are still collecting, expired or locked by another worker. Expired requests remain pending but are excluded from claims; infeasible or no-longer-serviceable claims remain pending too. Manual triggers respect the collection policy. Late insertion is a separate feasibility-based path. Driver offers are Java services without HTTP operations; batching does not automatically dispatch. Escalation reading does not create escalations.
+                                A batching response contains cycle counts, not full routes or total queue counts. Zero considered can mean saved requests are still collecting, expired or locked by another worker. Expired requests remain pending but are excluded from claims; infeasible or no-longer-serviceable claims remain pending too. Manual triggers respect the collection policy. Late insertion is a separate feasibility-based path. New trips attempt dispatch automatically. Offers last two minutes by default; rejection or expiry considers an untried driver, with at most three offers per trip. The expiry job runs every five seconds by default. No eligible driver, exhausted drivers and attempt limits are visible in trip outcomes; Advance retries when availability changes. Offers are database records, not delivered notifications. Escalation reading does not create escalations.
                                 """)
                         .version("v0.0.1"))
                 .addSecurityItem(new SecurityRequirement().addList(securitySchemeName))

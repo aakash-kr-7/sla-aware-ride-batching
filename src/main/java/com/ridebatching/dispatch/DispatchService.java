@@ -76,7 +76,7 @@ public class DispatchService {
     }
 
     @Transactional(noRollbackFor = OfferExpiredException.class)
-    public void acceptOffer(UUID offerId) {
+    public DispatchView acceptOffer(UUID offerId) {
         DriverOffer reference = findOffer(offerId);
         // All response paths lock trip -> offer -> driver. Driver locks serialize competing trips.
         Trip trip = lockTrip(reference.getTripId());
@@ -85,7 +85,7 @@ public class DispatchService {
         entityManager.refresh(driver);
         if (offer.getStatus() == DriverOfferStatus.ACCEPTED) {
             if (trip.getStatus() == TripStatus.DISPATCHED && driver.getId().equals(trip.getDriverId())
-                    && trip.getId().equals(driver.getActiveTripId())) return;
+                    && trip.getId().equals(driver.getActiveTripId())) return view(trip, clock.instant());
             throw new DomainConflictException("Accepted offer no longer has an active assignment");
         }
         requirePlanned(trip);
@@ -100,6 +100,7 @@ public class DispatchService {
             if (!other.getId().equals(offerId) && other.getStatus() == DriverOfferStatus.OFFERED) expire(other, now);
         }
         metrics.counter("dispatch.acceptances").increment();
+        return view(trip, now);
     }
 
     private void rejectExpiredResponse(Trip trip, DriverOffer offer, Instant now) {
@@ -173,7 +174,8 @@ public class DispatchService {
             // Ignore temporary cool-off here: an attempted driver is never offered this trip again.
             boolean availableUntried = drivers.findAll().stream().anyMatch(d -> !attempted.contains(d.getId())
                     && eligibility.evaluate(d).isEligible() && d.getVehicleCapacity() >= trip.getPeakPassengers());
-            outcome = !history.isEmpty() && !availableUntried ? DispatchOutcome.DRIVERS_EXHAUSTED : DispatchOutcome.NO_ELIGIBLE_DRIVER;
+            outcome = availableUntried ? DispatchOutcome.READY_FOR_RETRY
+                    : history.isEmpty() ? DispatchOutcome.NO_ELIGIBLE_DRIVER : DispatchOutcome.DRIVERS_EXHAUSTED;
         }
         return new DispatchView(trip.getId(), trip.getStatus(), trip.getDriverId(), trip.getPeakPassengers(), outcome,
                 active == null ? null : active.getId(), history.size(), attemptLimit,

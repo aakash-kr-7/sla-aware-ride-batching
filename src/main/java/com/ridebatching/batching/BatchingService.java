@@ -33,11 +33,13 @@ public class BatchingService {
     private final BatchClaimPolicy claimPolicy;
     private final RequestClusterer clusterer;
     private final Clock clock;
+    private final com.ridebatching.dispatch.DispatchService dispatch;
 
     public BatchingService(BookingRepository bookingRepository, TripRepository tripRepository, BatchPlanner batchPlanner,
                            jakarta.persistence.EntityManager entityManager, MeterRegistry meterRegistry,
                            BatchClaimPolicy claimPolicy, RequestClusterer clusterer,
-                           @org.springframework.beans.factory.annotation.Qualifier("batchingClock") Clock clock) {
+                           @org.springframework.beans.factory.annotation.Qualifier("batchingClock") Clock clock,
+                           com.ridebatching.dispatch.DispatchService dispatch) {
         this.bookingRepository = bookingRepository;
         this.tripRepository = tripRepository;
         this.batchPlanner = batchPlanner;
@@ -46,6 +48,7 @@ public class BatchingService {
         this.claimPolicy = claimPolicy;
         this.clusterer = clusterer;
         this.clock = clock;
+        this.dispatch = dispatch;
     }
 
     public record BatchingResult(int bookingsConsidered, int tripsFormed, int bookingsLeftPending) {}
@@ -100,6 +103,11 @@ public class BatchingService {
             }
         
             int pendingRemaining = pendingBookings.size() - assignedCount;
+
+            // Flush routes/associations before dispatch reloads each locked aggregate.
+            // The offers join this transaction: a failure rolls planning and offers back together.
+            entityManager.flush();
+            for (Trip trip : trips) dispatch.advanceTrip(trip.getId());
         
             meterRegistry.counter("batching.trips_formed").increment(trips.size());
         

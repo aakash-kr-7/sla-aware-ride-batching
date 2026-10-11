@@ -63,5 +63,9 @@ app:
 dispatch:
   offer-lifetime: PT2M
   max-offers-per-trip: 3
+  expiry-scheduling:
+    enabled: true
+    interval-ms: 5000
+    max-trips-per-cycle: 100
   cool-off:
     duration: PT5M

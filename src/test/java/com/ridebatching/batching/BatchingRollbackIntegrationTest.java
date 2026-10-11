@@ -38,12 +38,37 @@ class BatchingRollbackIntegrationTest extends AbstractPostgresIntegrationTest {
 
     private UUID employeeId = UUID.randomUUID();
     @Autowired private com.ridebatching.zone.ServiceableZoneRepository zones;
+    @SpyBean private com.ridebatching.dispatch.DriverOfferRepository offers;
+    @Autowired private com.ridebatching.driver.DriverRepository drivers;
 
     @BeforeEach
     void setup() {
         Employee emp = new Employee(employeeId, "EMP_R", "Rollback", "rb@test.com");
         employeeRepository.save(emp);
         zones.saveAndFlush(new com.ridebatching.zone.ServiceableZone("Rollback", 0, 0, 5000, true));
+    }
+
+    @Test
+    void offerPersistenceFailureRollsBackFlushedTripsAndBookingAssociations() {
+        var driver = new com.ridebatching.driver.Driver(UUID.randomUUID(), "Rollback driver", 4);
+        driver.goOnline(); drivers.saveAndFlush(driver);
+        Employee emp = employeeRepository.findById(employeeId).orElseThrow();
+        Instant created = Instant.now().minusSeconds(1200);
+        bookingRepository.saveAndFlush(new Booking(UUID.randomUUID(), emp, new GeoPoint(0, 0), new GeoPoint(0.01, 0),
+                BatchingWindow.forTime(created, java.time.Duration.ofMinutes(15)).start(), BookingStatus.PENDING,
+                Instant.now().plusSeconds(3600), created, "offer-rollback"));
+        Mockito.doThrow(new RuntimeException("Injected offer persistence failure")).when(offers).save(Mockito.any());
+        try {
+            assertThrows(RuntimeException.class, () -> batchingService.formBatches());
+            assertThat(tripRepository.count()).isZero();
+            assertThat(offers.count()).isZero();
+            assertThat(bookingRepository.findAll()).singleElement().satisfies(b -> {
+                assertThat(b.getStatus()).isEqualTo(BookingStatus.PENDING);
+                assertThat(b.getTripId()).isNull();
+            });
+        } finally { Mockito.reset(offers); }
+        assertThat(batchingService.formBatches().tripsFormed()).isEqualTo(1);
+        assertThat(offers.count()).isEqualTo(1);
     }
 
     @Test

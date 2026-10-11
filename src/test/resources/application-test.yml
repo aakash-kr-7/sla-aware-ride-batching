@@ -1,7 +1,18 @@
 # PostgreSQL connection details are supplied by Testcontainers.
-# Main configuration remains active; only signing material is test-specific.
+# Main configuration remains active; signing material, pool sizing and scheduling are test-specific.
+spring:
+  datasource:
+    hikari:
+      # Several cached Spring contexts share one PostgreSQL container (100 connections).
+      # Six connections still allow the forced-lock and five-worker concurrency tests.
+      maximum-pool-size: 6
+      minimum-idle: 1
 app:
   security:
     jwt:
       # Test-only signing material, never loaded by the packaged application.
       secret: test-only-jwt-signing-key-for-integration-tests-0123456789
+dispatch:
+  expiry-scheduling:
+    # Tests advance the injected clock and invoke the job explicitly, without wall-clock races.
+    enabled: false
