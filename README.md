@@ -13,7 +13,7 @@ The repository implements booking, planning, dispatch and trip mutation, Postgre
 | 3 | [Assumptions](docs/assumptions.md), [batching strategy](docs/batching-strategy.md) | Which policies/approximations were chosen, and how are routes accepted or changed? |
 | 4 | [Failure modes](docs/failure-modes.md), [API contract](docs/api-design.md) | How are races/rollback handled, what is exposed, and what remains unsafe/incomplete? |
 | 5 | [Test matrix](docs/test-matrix.md), [algorithm analysis](docs/algorithm-analysis.md) | What assertions support the invariants, and what does planning cost? |
-| 6 | [Reviewer demo](docs/demo.md) | How can I reproduce evidence and make sample API calls? |
+| 6 | [Demo walkthrough](docs/demo-walkthrough.md), [focused test demo](docs/demo.md) | How can I reproduce the booking-to-dispatch scenario and inspect its evidence? |
 
 The [correctness review](docs/correctness-review.md) records source-cited defects, regression evidence, fixes and deferred concerns.
 
@@ -75,7 +75,16 @@ See [test coverage and gaps](docs/test-matrix.md) and [contribution conventions]
 
 ## Run locally
 
-Follow the [demo setup](docs/demo.md#local-http-walkthrough) for required environment values, PostgreSQL, opt-in admin bootstrap, explicit fixtures and sample requests. Defaults create no accounts or serviceable zones. The app listens on port 8080 unless SERVER_PORT is set; [Swagger UI](http://localhost:8080/swagger-ui/index.html) documents the available HTTP routes.
+For the deterministic reviewer scenario, install JDK 17+, Docker/Compose and Python 3.9+, start Docker, then run from the repository root:
+
+```sh
+python scripts/demo/demo.py reset
+python scripts/demo/demo.py run --hold
+```
+
+Use `python3` if required. On macOS/Linux, `./scripts/demo/reset.sh` and `./scripts/demo/run.sh --hold` are equivalent. The isolated demo uses PostgreSQL on port 55432 and the actual application on port 18080, with fixtures and assertion code confined to tests. It checks logical deduplication, zone errors, four-plus-one/SLA splits, driver rejection/cool-off/acceptance, late insertion, cancellation isolation and metrics. Existing HTTP endpoints are called over HTTP; dispatch and trip inspection use existing Java services because they have no HTTP routes. It adds no product features. See the [6–10 minute walkthrough](docs/demo-walkthrough.md) for data, commands, evidence and cleanup.
+
+For ordinary local development, follow the [manual setup](docs/demo.md#local-http-walkthrough) for environment values, PostgreSQL and opt-in admin bootstrap. Defaults create no accounts or serviceable zones. The normal app listens on port 8080 unless SERVER_PORT is set; [Swagger UI](http://localhost:8080/swagger-ui/index.html) documents its HTTP routes.
 
 ## Design and operational notes
 

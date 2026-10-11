@@ -1,5 +1,7 @@
 # Reviewer Demo
 
+Start with the [deterministic demo walkthrough](demo-walkthrough.md): reset and run commands reproduce booking, splits, service-level dispatch and route mutation against the actual HTTP server and PostgreSQL without manual database editing. This page retains the focused test command and optional manual development setup; its single-booking curl examples are not the full reviewer scenario.
+
 ## Repeatable invariant demonstration
 
 With JDK 17+ and Docker running, use the wrapper. This selection uses disposable PostgreSQL, seeds its own fixtures and needs no populated `.env`:

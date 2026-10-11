@@ -54,3 +54,5 @@ The global handler maps missing booking to 404 (`BOOKING_NOT_FOUND`), unservicea
 Login failure is plain text. Invalid arguments return 400 (`INVALID_REQUEST`); explicit domain transitions and optimistic/pessimistic lock conflicts return 409 (`STATE_CONFLICT`). Conflict responses do not echo database details. Unexpected internal failures remain server errors. The JWT filter handles only token/account authentication errors; it does not relabel downstream failures. See [failure modes](failure-modes.md).
 
 Trip progress/retrieval, driver offers, zone/fleet CRUD and escalation resolution have no HTTP routes.
+
+The [deterministic reviewer demo](demo-walkthrough.md) calls existing HTTP endpoints and invokes existing dispatch services from an opt-in test runner for the stages without HTTP routes. Its isolated server listens on port 18080; it does not change this production API contract.
