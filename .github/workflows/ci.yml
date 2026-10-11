@@ -26,3 +26,8 @@ jobs:
 
       - name: Build and verify with Maven
         run: ./mvnw --batch-mode clean verify
+
+      - name: Verify the reviewer demo
+        run: |
+          python3 scripts/demo/demo.py reset
+          python3 scripts/demo/demo.py run
