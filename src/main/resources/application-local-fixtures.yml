@@ -1,0 +1,19 @@
+# Explicit, disposable local setup. Never activate this profile for real data.
+spring:
+  datasource:
+    url: jdbc:postgresql://127.0.0.1:55433/ride_batching_local
+    username: local_user
+    password: local-database-only
+server:
+  address: 127.0.0.1
+  port: 8080
+app:
+  security:
+    jwt:
+      secret: local-fixtures-only-signing-key-do-not-use-for-real-data
+  batching:
+    # Admit fresh 20-minute promises immediately for a short local walkthrough.
+    urgent-lead-time-seconds: 1200
+dispatch:
+  # Give a presenter time to inspect responses. Acceptance still rechecks SLA.
+  offer-lifetime: PT10M

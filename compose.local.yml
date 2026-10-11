@@ -1,0 +1,20 @@
+# Independent of docker-compose.yml and .env; all data is disposable.
+name: ride-batching-local
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ride_batching_local
+      POSTGRES_USER: local_user
+      POSTGRES_PASSWORD: local-database-only
+    ports:
+      - "127.0.0.1:55433:5432"
+    volumes:
+      - local_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U local_user -d ride_batching_local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+volumes:
+  local_postgres_data:
