@@ -46,7 +46,7 @@ curl.exe -X POST "http://127.0.0.1:8080/api/admin/dispatch/offers/$offerId/accep
 curl.exe -X POST "http://127.0.0.1:8080/api/admin/dispatch/trips/$tripId/advance" -H "Authorization: Bearer $adminToken"
 ```
 
-`tripStatus=PLANNED` with an `OFFERED` outcome is expected: pending offers do not change trip status. `DISPATCHED` means a driver accepted, not that pickup occurred. `peakPassengers` is simultaneous occupancy, not the selected vehicle's seat limit. `stops` exposes grouping through booking IDs and ordered pickup/dropoff pairs. `assignedDriverId` retains historical assignment on a cancelled trip; it does not mean the driver's active-trip link remains set.
+`tripStatus=PLANNED` with an `OFFERED` outcome is expected: pending offers do not change trip status. `DISPATCHED` means a driver accepted, not that pickup occurred. `peakPassengers` is simultaneous occupancy, not the selected vehicle's seat limit. `bookingIds` and `stops` expose grouping and ordered pickup/dropoff pairs. `planningCapacity` shows current planning seats; pickup rows compare saved estimates with deadlines. Single-trip GET can also accept a `candidateBookingId` for a read-only comparison against a planned trip; [inspection guide](trip-inspection.md) explains rejection samples and current-time semantics. `assignedDriverId` retains historical assignment on a cancelled trip; it does not mean the driver's active-trip link remains set.
 
 ## Policies and outcomes
 

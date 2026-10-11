@@ -19,7 +19,7 @@ Ad-hoc employee pickups can produce unnecessary cab journeys. Nearby pickups and
 | Bookings | Authenticated creation, pickup-zone validation, logical deduplication, retrieval, pagination and cancellation |
 | Planning | Bounded closed-window/urgent claims; zone/direction grouping; manual or opt-in scheduled cycles; capacity, pickup SLA and detour checks |
 | Trip mutation | Late insertion into planned trips; pre-execution cancellation removes stops and recomputes arrival estimates on the affected route |
-| Dispatch | Automatic initial offers, rejection/expiry re-offering, bounded attempts and atomic acceptance; authenticated admin simulation controls |
+| Dispatch | Automatic initial offers, rejection/expiry re-offering, bounded attempts and atomic acceptance; authenticated trip/grouping/SLA inspection and admin simulation controls |
 | Lifecycle | Confirmed route, accepted driver, ordered pickup/dropoff, trip completion and driver release; admin execution simulation |
 | Operations | PostgreSQL persistence, Flyway migrations, JWT ownership/role checks, zone caching, health, metrics and Prometheus |
 
@@ -106,7 +106,7 @@ On PowerShell use `./mvnw.cmd clean verify`. This runs the full suite and packag
 | [Requirements traceability](docs/requirements-traceability.md), [test matrix](docs/test-matrix.md) | Implementation claims, assertions and coverage gaps |
 | [Architecture](docs/architecture.md), [domain model](docs/domain-model.md), [booking lifecycle](docs/booking-lifecycle.md) | Responsibilities, request flow and reachable states |
 | [Batching strategy](docs/batching-strategy.md), [algorithm analysis](docs/algorithm-analysis.md), [planner and ETA decisions](docs/planner-and-eta.md) | Search, feasibility and computational cost |
-| [API contract](docs/api-design.md), [dispatch workflow](docs/dispatch-workflow.md), [local development](docs/local-development.md) | Actual endpoints, offer outcomes, startup and provisioning boundaries |
+| [API contract](docs/api-design.md), [trip inspection](docs/trip-inspection.md), [dispatch workflow](docs/dispatch-workflow.md), [local development](docs/local-development.md) | Actual endpoints, offer outcomes, startup and provisioning boundaries |
 | [Assumptions](docs/assumptions.md), [failure modes](docs/failure-modes.md) | Policy choices, approximations and operational limits |
 | [Deduplication](docs/decisions/0005-handle-booking-deduplication.md), [clustering](docs/decisions/0006-request-clustering.md), [caching](docs/decisions/007-zone-caching.md) | Design rationale and trade-offs |
 

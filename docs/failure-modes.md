@@ -44,7 +44,7 @@ Metrics use Micrometer; candidate rejections are not committed booking counts:
 | `bookings.cancellation_replans` | Newly applied associated-trip cancellation path; idempotent repeats excluded, not distinct optimized routes |
 | `batching.duration` | Cycle time, including empty cycles and failures |
 | `batching.trips_formed` | Planned trip count incremented before transaction commit |
-| `batching.sla_rejections`, `batching.detour_rejections` | Rejected route evaluations in insertion, offering, dispatch-readiness views and new acceptance; potentially many for one request |
+| `batching.sla_rejections`, `batching.detour_rejections` | Rejected operational route evaluations in insertion, offering and new acceptance; potentially many for one request. Read-only inspection/readiness checks are excluded |
 | `batching.trip_splits` | No fit among existing candidates; incremented before evaluating a solo trip, even if it is rejected |
 | `batching.late_insertion` | Success/failure result when planned candidates exist; no-candidate early return is not counted |
 | `dispatch.offers`, `dispatch.rejections`, `dispatch.acceptances`, `dispatch.expirations` | Persist/response paths; offers are not delivered messages; an idempotent rejection retry does not count again |
