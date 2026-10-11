@@ -69,6 +69,8 @@ flowchart LR
 
 ## Live explanation: about eight minutes
 
+New to the project? Start with [Project explained](project-explained.md) for the file map, design decisions, all Swagger operations and the real-world situation behind each scenario.
+
 Run the whole scenario once using the start commands above. Every stage below has already executed and been asserted before `PASS`. The commands in this table display its **actual captured output**; they do not repeat mutations or require non-existent HTTP endpoints. Each JSON file and the combined `target/demo/evidence.md` are regenerated per run. Use `python3` on systems without a `python` alias.
 
 | Time | Stage and command to run in the second terminal | Behaviour to point out | Why it matters technically |

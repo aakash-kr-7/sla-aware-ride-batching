@@ -114,6 +114,7 @@ Stop with `Ctrl+C` or `python scripts/demo/demo.py stop`. Reset deletes only the
 
 | Read | Purpose |
 | --- | --- |
+| [Project explained](docs/project-explained.md) | Plain-language design, file map, Swagger controls and how each case-study scenario arises |
 | [Requirements traceability](docs/requirements-traceability.md), [test matrix](docs/test-matrix.md) | Implementation claims, assertions and coverage gaps |
 | [Architecture](docs/architecture.md), [domain model](docs/domain-model.md) | Responsibilities, request flow and reachable states |
 | [Batching strategy](docs/batching-strategy.md), [algorithm analysis](docs/algorithm-analysis.md) | Search, feasibility and computational cost |
