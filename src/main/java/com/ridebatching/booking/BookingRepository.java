@@ -51,4 +51,19 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             @org.springframework.data.repository.query.Param("closedWindowsBefore") java.time.Instant closedWindowsBefore,
             @org.springframework.data.repository.query.Param("urgentDeadlineThrough") java.time.Instant urgentDeadlineThrough,
             @org.springframework.data.repository.query.Param("claimLimit") int claimLimit);
+
+    // A separate bounded recovery pass does not let an expired backlog crowd out eligible claims.
+    @org.springframework.data.jpa.repository.Query(value = """
+            SELECT b.* FROM bookings b
+            WHERE b.status='PENDING' AND b.trip_id IS NULL AND b.created_at <= :now
+              AND b.pickup_sla_deadline < :now
+              AND NOT EXISTS (SELECT 1 FROM sla_escalation e WHERE e.reference_id=b.id
+                  AND e.reference_type='BOOKING' AND e.reason=:reason AND e.status='OPEN')
+            ORDER BY b.pickup_sla_deadline, b.created_at, b.id
+            LIMIT :claimLimit FOR UPDATE OF b SKIP LOCKED
+            """, nativeQuery = true)
+    java.util.List<Booking> claimExpiredWithoutEscalation(
+            @org.springframework.data.repository.query.Param("now") java.time.Instant now,
+            @org.springframework.data.repository.query.Param("reason") String reason,
+            @org.springframework.data.repository.query.Param("claimLimit") int claimLimit);
 }

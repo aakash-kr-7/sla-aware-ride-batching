@@ -34,12 +34,14 @@ public class BatchingService {
     private final RequestClusterer clusterer;
     private final Clock clock;
     private final com.ridebatching.dispatch.DispatchService dispatch;
+    private final com.ridebatching.escalation.BookingSlaEscalations escalations;
 
     public BatchingService(BookingRepository bookingRepository, TripRepository tripRepository, BatchPlanner batchPlanner,
                            jakarta.persistence.EntityManager entityManager, MeterRegistry meterRegistry,
                            BatchClaimPolicy claimPolicy, RequestClusterer clusterer,
                            @org.springframework.beans.factory.annotation.Qualifier("batchingClock") Clock clock,
-                           com.ridebatching.dispatch.DispatchService dispatch) {
+                           com.ridebatching.dispatch.DispatchService dispatch,
+                           com.ridebatching.escalation.BookingSlaEscalations escalations) {
         this.bookingRepository = bookingRepository;
         this.tripRepository = tripRepository;
         this.batchPlanner = batchPlanner;
@@ -49,6 +51,7 @@ public class BatchingService {
         this.clusterer = clusterer;
         this.clock = clock;
         this.dispatch = dispatch;
+        this.escalations = escalations;
     }
 
     public record BatchingResult(int bookingsConsidered, int tripsFormed, int bookingsLeftPending) {}
@@ -65,6 +68,12 @@ public class BatchingService {
         Timer.Sample timerSample = Timer.start(meterRegistry);
         try {
             Instant routeStartTime = clock.instant();
+            // With zero driver approach in this model, a solo pickup's earliest ETA is now.
+            // Record missed promises without assigning knowingly infeasible trips.
+            for (Booking expired : bookingRepository.claimExpiredWithoutEscalation(routeStartTime,
+                    com.ridebatching.escalation.BookingSlaEscalations.SOLO_UNREACHABLE, claimPolicy.maxBookingsPerCycle())) {
+                escalations.soloUnreachable(expired.getId(), routeStartTime);
+            }
             // Eligibility and route estimates share one cycle timestamp.
             List<Booking> pendingBookings = bookingRepository.claimEligibleBookings(routeStartTime,
                     claimPolicy.closedWindowsBefore(routeStartTime), claimPolicy.urgentDeadlineThrough(routeStartTime),
