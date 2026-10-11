@@ -42,9 +42,9 @@ HTTP DTOs normally live beside their feature. Controllers translate requests; se
 flowchart TD
     Request[Authenticated booking request] --> Validate[Validate coordinates, serviceable pickup and employee]
     Validate --> Key[Compute UTC slot, deadline and dedup key]
-    Key --> Save[saveAndFlush in repository transaction]
-    Save -->|Duplicate constraint| Existing[Read and return existing booking]
-    Save -->|Committed new booking| Late[Separate late-insertion transaction]
+    Key --> Save[INSERT ON CONFLICT in creation transaction]
+    Save -->|Existing active key| Existing[Read and return existing booking]
+    Save -->|New booking| Late[Late insertion in same transaction]
     Late -->|Feasible planned trip| Confirm[Persist route and CONFIRMED association]
     Late -->|No fit| Pending[Return PENDING booking]
     Pending --> Trigger[Explicit admin trigger or enabled scheduler]
@@ -53,7 +53,7 @@ flowchart TD
     Plan -->|Even solo infeasible| Remain[Remain PENDING]
 ```
 
-The HTTP route returns 201 for both a new booking and a duplicate. There is no client-requested time field: creation time supplies the slot and pickup promise. Booking save and late insertion are separate commits; an insertion exception can leave a durable pending booking despite an unsuccessful HTTP response. See [concurrency and failure boundaries](failure-modes.md).
+The HTTP route returns 201 for both a new booking and a duplicate. There is no client-requested time field: creation time supplies the slot and pickup promise. Creation and late insertion commit together; an insertion exception rolls back the new booking. See [concurrency and failure boundaries](failure-modes.md).
 
 ## Driver offers
 

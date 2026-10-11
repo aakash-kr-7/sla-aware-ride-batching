@@ -72,7 +72,11 @@ class BookingServiceTest {
         when(appProperties.batching()).thenReturn(batchingProps);
         when(appProperties.sla()).thenReturn(new com.ridebatching.config.AppProperties.SlaProperties(25));
 
-        when(bookingRepository.saveAndFlush(any(Booking.class))).thenAnswer(i -> i.getArguments()[0]);
+        when(bookingRepository.insertIfAbsent(any(Booking.class))).thenAnswer(i -> {
+            Booking inserted = i.getArgument(0);
+            when(bookingRepository.findById(inserted.getId())).thenReturn(Optional.of(inserted));
+            return 1;
+        });
 
         BookingRequest request = new BookingRequest(
             new GeoPointDto(12.9716, 77.5946),
@@ -112,7 +116,7 @@ class BookingServiceTest {
         Booking booking = new Booking(bookingId, employee, new GeoPoint(0,0), new GeoPoint(0,0), 
             java.time.Instant.now(), BookingStatus.PENDING, java.time.Instant.now(), java.time.Instant.now(), "key");
             
-        when(bookingRepository.findById(bookingId)).thenReturn(Optional.of(booking));
+        when(bookingRepository.findByIdForUpdate(bookingId)).thenReturn(Optional.of(booking));
         when(bookingRepository.save(any(Booking.class))).thenAnswer(i -> i.getArguments()[0]);
 
         BookingResponse response = bookingService.cancelBooking(employeeId, bookingId);
@@ -134,7 +138,7 @@ class BookingServiceTest {
             
         com.ridebatching.trip.Trip trip = mock(com.ridebatching.trip.Trip.class);
         
-        when(bookingRepository.findById(bookingId)).thenReturn(Optional.of(booking));
+        when(bookingRepository.findByIdForUpdate(bookingId)).thenReturn(Optional.of(booking));
         when(tripRepository.findByIdForUpdate(tripId)).thenReturn(Optional.of(trip));
         when(bookingRepository.save(any(Booking.class))).thenAnswer(i -> i.getArguments()[0]);
 
@@ -155,7 +159,7 @@ class BookingServiceTest {
         Booking booking = new Booking(bookingId, employee, new GeoPoint(0,0), new GeoPoint(0,0), 
             java.time.Instant.now(), BookingStatus.DROPPED, java.time.Instant.now(), java.time.Instant.now(), "key");
             
-        when(bookingRepository.findById(bookingId)).thenReturn(Optional.of(booking));
+        when(bookingRepository.findByIdForUpdate(bookingId)).thenReturn(Optional.of(booking));
 
         IllegalStateException exception = assertThrows(IllegalStateException.class, 
             () -> bookingService.cancelBooking(employeeId, bookingId));

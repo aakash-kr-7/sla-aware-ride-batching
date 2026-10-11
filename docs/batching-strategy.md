@@ -52,9 +52,9 @@ Neither component partitions the runtime claim. The case study's window + zone/d
 
 ## Late arrival
 
-After the new booking commits, late insertion loads `PLANNED` trips and a booking map, finds an initially feasible candidate, then locks only that trip. It checks status, refreshes the trip, repeats insertion/evaluation and persists the route/confirmation if feasible. Dispatched trips are excluded from the initial search. It does not retry another trip after the selected one fails revalidation.
+Late insertion locks and reloads the booking first, accepting only an unassociated PENDING row. It searches PLANNED trips, then locks and reloads the selected aggregate, including stops, checks its current state and rebuilds the route-specific booking map before re-evaluating all riders. Creation joins this transaction. Dispatched trips are excluded. It does not retry another trip after the selected one fails revalidation.
 
-The booking map is not rebuilt after refresh, and status is checked before that refresh. Mixed insertion/cancellation/dispatch races therefore need more coverage; the passing capacity race is not proof of every interleaving. See [failure boundaries](failure-modes.md).
+Booking mutations use booking-then-trip lock order. PostgreSQL regressions cover stale cancelled/assigned input, cancellation racing insertion and a competing route replacement that adds a rider with a tight SLA. See [failure boundaries](failure-modes.md).
 
 ## Local cancellation
 

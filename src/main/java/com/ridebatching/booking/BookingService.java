@@ -58,9 +58,7 @@ public class BookingService {
         this.meterRegistry = meterRegistry;
     }
 
-    // Removed @Transactional to prevent DataIntegrityViolationException from marking 
-    // an outer transaction (if any) as rollback-only. We handle the duplicate race 
-    // condition natively.
+    @Transactional
     public BookingResponse createBooking(UUID employeeId, BookingRequest request) {
         meterRegistry.counter("bookings.requests").increment();
 
@@ -99,25 +97,17 @@ public class BookingService {
             dedupKey
         );
 
-        Booking saved;
-        try {
-            // Using saveAndFlush so constraint violations are thrown immediately here
-            // rather than deferred to transaction commit.
-            saved = bookingRepository.saveAndFlush(booking);
-        } catch (org.springframework.dao.DataIntegrityViolationException e) {
-            // Uniqueness race: another thread inserted the same booking.
+        if (bookingRepository.insertIfAbsent(booking) == 0) {
             meterRegistry.counter("bookings.deduplication_hits").increment();
             log.info("Deduplication hit for employee dedup key");
-            return bookingRepository.findByDeduplicationKey(dedupKey)
+            return bookingRepository.findByDeduplicationKeyAndStatusNot(dedupKey, BookingStatus.CANCELLED)
                 .map(this::mapToResponse)
-                .orElseThrow(() -> new IllegalStateException("Duplicate booking detected but could not be retrieved", e));
+                .orElseThrow(() -> new IllegalStateException("Booking changed during duplicate submission"));
         }
 
-        boolean lateInserted = batchingService.attemptLateInsertion(saved);
-        if (lateInserted) {
-            saved = bookingRepository.findById(saved.getId()).orElse(saved);
-        }
-        return mapToResponse(saved);
+        Booking saved = bookingRepository.findById(booking.getId()).orElseThrow();
+        batchingService.attemptLateInsertion(saved);
+        return bookingRepository.findById(saved.getId()).map(this::mapToResponse).orElseThrow();
     }
 
     @Transactional(readOnly = true)
@@ -129,7 +119,7 @@ public class BookingService {
 
     @Transactional
     public BookingResponse cancelBooking(UUID employeeId, UUID bookingId) {
-        Booking booking = bookingRepository.findById(bookingId)
+        Booking booking = bookingRepository.findByIdForUpdate(bookingId)
             .orElseThrow(() -> new BookingNotFoundException("Booking not found with id: " + bookingId));
             
         if (!booking.getEmployee().getId().equals(employeeId)) {

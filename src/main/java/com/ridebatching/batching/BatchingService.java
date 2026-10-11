@@ -90,6 +90,15 @@ public class BatchingService {
      */
     @Transactional
     public boolean attemptLateInsertion(Booking booking) {
+        // Share the booking claim protocol with batching/cancellation before locking a trip.
+        if (entityManager.contains(booking)) {
+            entityManager.detach(booking);
+        }
+        Booking claimed = bookingRepository.findByIdForUpdate(booking.getId()).orElse(null);
+        if (claimed == null || claimed.getStatus() != BookingStatus.PENDING || claimed.getTripId() != null) {
+            return false;
+        }
+        booking = claimed;
         // Find existing planned trips
         List<Trip> candidateTrips = tripRepository.findByStatusIn(List.of(com.ridebatching.trip.TripStatus.PLANNED));
         if (candidateTrips.isEmpty()) {
@@ -113,10 +122,18 @@ public class BatchingService {
                 candidateTrips, booking, currentBookings, Instant.now(), dummyVehicle);
 
         if (initialResult != null) {
+            // Reload the aggregate after acquiring its row lock. Cascaded REFRESH of the
+            // old collection can fail if a concurrent mutation deleted those stop rows.
+            entityManager.detach(initialResult.trip());
             Trip lockedTrip = tripRepository.findByIdForUpdate(initialResult.trip().getId()).orElse(null);
             if (lockedTrip != null && lockedTrip.getStatus() == com.ridebatching.trip.TripStatus.PLANNED) {
-                // Refresh entity to clear L1 cache state and load latest stops from DB
-                entityManager.refresh(lockedTrip);
+                currentBookings.clear();
+                List<UUID> lockedBookingIds = lockedTrip.getStops().stream()
+                        .map(com.ridebatching.trip.TripStop::getBookingId).distinct().toList();
+                for (Booking rider : bookingRepository.findAllById(lockedBookingIds)) {
+                    currentBookings.put(rider.getId(), rider);
+                }
+                currentBookings.put(booking.getId(), booking);
                 
                 // Re-verify after locking
                 BatchPlanner.InsertionResult finalResult = batchPlanner.findBestTripForInsertion(

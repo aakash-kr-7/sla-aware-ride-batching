@@ -12,6 +12,27 @@ import java.util.Optional;
 @Repository
 public interface BookingRepository extends JpaRepository<Booking, UUID> {
     Optional<Booking> findByDeduplicationKey(String deduplicationKey);
+
+    Optional<Booking> findByDeduplicationKeyAndStatusNot(String key, BookingStatus status);
+
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("SELECT b FROM Booking b WHERE b.id = :id")
+    Optional<Booking> findByIdForUpdate(@org.springframework.data.repository.query.Param("id") UUID id);
+
+    // ON CONFLICT avoids aborting the surrounding creation/insertion transaction.
+    @org.springframework.data.jpa.repository.Modifying(flushAutomatically = true)
+    @org.springframework.data.jpa.repository.Query(value = """
+        INSERT INTO bookings (id, employee_id, pickup_latitude, pickup_longitude,
+            dropoff_latitude, dropoff_longitude, slot_timestamp, status,
+            pickup_sla_deadline, created_at, deduplication_key)
+        VALUES (:#{#booking.id}, :#{#booking.employee.id},
+            :#{#booking.pickupLocation.latitude()}, :#{#booking.pickupLocation.longitude()},
+            :#{#booking.dropoffLocation.latitude()}, :#{#booking.dropoffLocation.longitude()},
+            :#{#booking.slotTimestamp}, 'PENDING', :#{#booking.pickupSlaDeadline},
+            :#{#booking.createdAt}, :#{#booking.deduplicationKey})
+        ON CONFLICT (deduplication_key) WHERE status <> 'CANCELLED' DO NOTHING
+        """, nativeQuery = true)
+    int insertIfAbsent(@org.springframework.data.repository.query.Param("booking") Booking booking);
     
     Page<Booking> findByEmployeeId(UUID employeeId, Pageable pageable);
 

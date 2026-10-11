@@ -6,15 +6,13 @@ Correctness relies on PostgreSQL constraints/locks, not JVM-local locks. There a
 
 | Case | Mechanism and outcome | Evidence / boundary |
 | --- | --- | --- |
-| Duplicate creation | Repository `saveAndFlush` transaction; partial unique dedup index chooses winner. Losing transaction ends before lookup; HTTP path returns existing ID with 201. | [BookingConcurrencyIntegrationTest](../src/test/java/com/ridebatching/booking/BookingConcurrencyIntegrationTest.java): ten synchronized callers, one new row, same ID. Cancelled-history lookup is not covered. |
+| Duplicate creation | One creation transaction uses targeted `ON CONFLICT DO NOTHING`; active-only lookup returns the winner with 201. Late insertion commits with creation. | [BookingConcurrencyIntegrationTest](../src/test/java/com/ridebatching/booking/BookingConcurrencyIntegrationTest.java): ten synchronized callers, one new row, same ID. [BookingMutationRegressionIntegrationTest](../src/test/java/com/ridebatching/booking/BookingMutationRegressionIntegrationTest.java) covers cancel/rebook history and creation rollback. |
 | Competing batching workers | Each `formBatches` transaction claims PENDING rows using `FOR UPDATE SKIP LOCKED`; trip/stop writes and confirmation commit together. Locked rows are skipped, not waited for. | [ConcurrentBatchingIntegrationTest](../src/test/java/com/ridebatching/batching/ConcurrentBatchingIntegrationTest.java): five workers, ten bookings considered in total, all confirmed. No fairness, optimal grouping or infeasible-pending retry bound follows. |
-| Concurrent late insertion | Initial search, trip `PESSIMISTIC_WRITE` lock, refresh and repeated feasibility evaluation in one insertion transaction. | [TripMutationConcurrencyIntegrationTest](../src/test/java/com/ridebatching/trip/TripMutationConcurrencyIntegrationTest.java): five arrivals compete for one remaining seat; exactly one confirms. Pre-lock booking map is not rebuilt; status is checked before refresh. |
-| Cancellation mutation | One transaction checks employee ownership, cancels booking, locks only associated trip and removes/resequences stops. | [BookingCancellationIntegrationTest](../src/test/java/com/ridebatching/booking/BookingCancellationIntegrationTest.java): affected trip loses two stops; another keeps stop count and update timestamp. Concurrent cancellation/late-insertion is not tested. |
+| Concurrent late insertion | Lock/reload PENDING booking, initial search, lock/reload selected trip and stops, rebuild booking map and repeat feasibility in one transaction. | [TripMutationConcurrencyIntegrationTest](../src/test/java/com/ridebatching/trip/TripMutationConcurrencyIntegrationTest.java): five arrivals compete for one remaining seat; exactly one confirms. Mutation regressions cover added-rider SLA revalidation and stale assigned/cancelled input. |
+| Cancellation mutation | One transaction locks booking, checks ownership, cancels it, locks only associated trip and removes/resequences stops. | [BookingCancellationIntegrationTest](../src/test/java/com/ridebatching/booking/BookingCancellationIntegrationTest.java): affected trip loses two stops; another keeps stop count and update timestamp. Mutation regression forces an actual PostgreSQL booking lock wait during concurrent insertion/cancellation. |
 | Competing acceptance | One transaction marks offer accepted, locks trip, guards trip assignment and assigns driver. Partial unique index also allows at most one ACCEPTED offer per trip. Failure rolls back offer and assignments. | [DispatchIntegrationTest](../src/test/java/com/ridebatching/dispatch/DispatchIntegrationTest.java): two offers race, one succeeds, loser stays OFFERED. Driver row is not locked/versioned; same driver accepting different trips concurrently is not proven safe. |
 
-The dedup catch treats every `DataIntegrityViolationException` as a duplicate. Its lookup lacks an active-status filter; repeated cancel/rebook can leave multiple same-key rows. Nullable legacy/direct-write keys are outside the service guarantee. See [ADR 005](decisions/0005-handle-booking-deduplication.md).
-
-Late insertion begins after booking save commits. It can leave a pending booking after an exception; a caller retry may retrieve that row. Its pre-lock booking map can lack a rider added concurrently, causing failed evaluation even after a refreshed route. Mixed races between batching, insertion, cancellation and dispatch need targeted tests; trip locks do not by themselves establish correct stale reads or booking-status transitions.
+Nullable legacy/direct-write dedup keys remain outside the service guarantee. See [ADR 005](decisions/0005-handle-booking-deduplication.md). Trip and booking locks cover the tested mutation interleavings; they do not imply driver race safety or optimal grouping.
 
 ## Failure and recovery
 
@@ -39,7 +37,7 @@ Metrics use Micrometer; candidate rejections are not committed booking counts:
 | Metric | What it actually measures |
 | --- | --- |
 | `bookings.requests`, `bookings.serviceability_rejections` | Service-entry attempts and unsupported-pickup rejections, not successful/unique HTTP bookings |
-| `bookings.deduplication_hits` | Caught integrity violations on creation; catch is broader than the dedup index |
+| `bookings.deduplication_hits` | Active-key conflicts on creation |
 | `bookings.cancellation_replans` | Associated-trip cancellation path, including repeat calls; not distinct optimized routes |
 | `batching.duration` | Cycle time, including empty cycles and failures |
 | `batching.trips_formed` | Planned trip count incremented before transaction commit |

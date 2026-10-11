@@ -39,7 +39,7 @@ public class Booking {
     private Instant pickupSlaDeadline;
     private Instant createdAt;
     
-    @jakarta.persistence.Column(name = "deduplication_key", unique = true, nullable = false)
+    @jakarta.persistence.Column(name = "deduplication_key", nullable = false)
     private String deduplicationKey;
 
     protected Booking() {
