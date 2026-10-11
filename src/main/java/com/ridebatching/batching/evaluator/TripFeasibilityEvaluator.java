@@ -66,20 +66,27 @@ public class TripFeasibilityEvaluator {
     /**
      * Evaluates a candidate route insertion.
      * 
-     * @param candidateRoute The ordered stops of the proposed route
-     * @param currentBookings The bookings participating in this route
+     * @param route The ordered stops of the proposed route
+     * @param bookings The bookings participating in this route
      * @param vehicle The assigned vehicle (can be null if unassigned, bypassing capacity check)
-     * @param routeStartTime The proposed start time of the route
-     * @param candidateBookingId The booking ID being considered for insertion
+     * @param start The proposed start time of the route
+     * @param candidate The booking ID being considered for insertion
      * @return EvaluationTrace containing the outcome and evaluation path
      */
-    public EvaluationTrace evaluate(
-            List<TripStop> candidateRoute, 
-            Map<UUID, Booking> currentBookings, 
-            Vehicle vehicle, 
-            Instant routeStartTime, 
-            UUID candidateBookingId) {
-        
+    public EvaluationTrace evaluate(List<TripStop> route, Map<UUID, Booking> bookings,
+                                    Vehicle vehicle, Instant start, UUID candidate) {
+        return evaluate(route, bookings, vehicle, start, candidate, true);
+    }
+
+    /** Same constraints, without operational counters or decision logs for a read-only diagnostic. */
+    public EvaluationTrace inspect(List<TripStop> route, Map<UUID, Booking> bookings,
+                                   Vehicle vehicle, Instant start, UUID candidate) {
+        return evaluate(route, bookings, vehicle, start, candidate, false);
+    }
+
+    private EvaluationTrace evaluate(List<TripStop> candidateRoute, Map<UUID, Booking> currentBookings,
+                                     Vehicle vehicle, Instant routeStartTime, UUID candidateBookingId,
+                                     boolean emitEvents) {
         UUID traceId = UUID.randomUUID();
         List<String> evaluated = new ArrayList<>();
         
@@ -93,13 +100,13 @@ public class TripFeasibilityEvaluator {
         for (TripStop stop : candidateRoute) {
             if (stop.getType() == TripStopType.PICKUP) {
                 if (!pickedUp.add(stop.getBookingId())) {
-                    return logAndReturn(traceId, candidateRoute, candidateBookingId, evaluated, FeasibilityResult.infeasible("Duplicate pickup", new StructuralRejectionDetails("STRUCTURAL_DUPLICATE_PICKUP", stop.getBookingId())));
+                    return logAndReturn(traceId, candidateRoute, candidateBookingId, evaluated, emitEvents, FeasibilityResult.infeasible("Duplicate pickup", new StructuralRejectionDetails("STRUCTURAL_DUPLICATE_PICKUP", stop.getBookingId())));
                 }
                 onboard.add(stop.getBookingId());
                 currentPassengers++;
             } else if (stop.getType() == TripStopType.DROPOFF) {
                 if (!onboard.remove(stop.getBookingId())) {
-                    return logAndReturn(traceId, candidateRoute, candidateBookingId, evaluated, FeasibilityResult.infeasible("Dropoff before pickup", new StructuralRejectionDetails("STRUCTURAL_DROPOFF_BEFORE_PICKUP", stop.getBookingId())));
+                    return logAndReturn(traceId, candidateRoute, candidateBookingId, evaluated, emitEvents, FeasibilityResult.infeasible("Dropoff before pickup", new StructuralRejectionDetails("STRUCTURAL_DROPOFF_BEFORE_PICKUP", stop.getBookingId())));
                 }
                 currentPassengers--;
             }
@@ -110,7 +117,7 @@ public class TripFeasibilityEvaluator {
         
         if (!onboard.isEmpty()) {
             UUID missing = onboard.iterator().next();
-            return logAndReturn(traceId, candidateRoute, candidateBookingId, evaluated, FeasibilityResult.infeasible("Missing dropoff", new StructuralRejectionDetails("STRUCTURAL_MISSING_DROPOFF", missing)));
+            return logAndReturn(traceId, candidateRoute, candidateBookingId, evaluated, emitEvents, FeasibilityResult.infeasible("Missing dropoff", new StructuralRejectionDetails("STRUCTURAL_MISSING_DROPOFF", missing)));
         }
 
         // 2. Capacity Constraint
@@ -118,7 +125,7 @@ public class TripFeasibilityEvaluator {
             evaluated.add("CAPACITY");
             FeasibilityResult capacityResult = capacityConstraint.evaluate(vehicle, peakPassengers);
             if (!capacityResult.isFeasible()) {
-                return logAndReturn(traceId, candidateRoute, candidateBookingId, evaluated, capacityResult);
+                return logAndReturn(traceId, candidateRoute, candidateBookingId, evaluated, emitEvents, capacityResult);
             }
         }
 
@@ -126,19 +133,19 @@ public class TripFeasibilityEvaluator {
         evaluated.add("PICKUP_SLA");
         FeasibilityResult slaResult = pickupSlaConstraint.evaluate(candidateRoute, routeStartTime, currentBookings);
         if (!slaResult.isFeasible()) {
-            meterRegistry.counter("batching.sla_rejections").increment();
-            return logAndReturn(traceId, candidateRoute, candidateBookingId, evaluated, slaResult);
+            if (emitEvents) meterRegistry.counter("batching.sla_rejections").increment();
+            return logAndReturn(traceId, candidateRoute, candidateBookingId, evaluated, emitEvents, slaResult);
         }
 
         // 4. Detour Constraint
         evaluated.add("DETOUR");
         FeasibilityResult detourResult = detourConstraint.evaluate(candidateRoute, currentBookings);
         if (!detourResult.isFeasible()) {
-            meterRegistry.counter("batching.detour_rejections").increment();
-            return logAndReturn(traceId, candidateRoute, candidateBookingId, evaluated, detourResult);
+            if (emitEvents) meterRegistry.counter("batching.detour_rejections").increment();
+            return logAndReturn(traceId, candidateRoute, candidateBookingId, evaluated, emitEvents, detourResult);
         }
 
-        return logAndReturn(traceId, candidateRoute, candidateBookingId, evaluated, FeasibilityResult.feasible());
+        return logAndReturn(traceId, candidateRoute, candidateBookingId, evaluated, emitEvents, FeasibilityResult.feasible());
     }
 
     private EvaluationTrace logAndReturn(
@@ -146,7 +153,7 @@ public class TripFeasibilityEvaluator {
             List<TripStop> candidateRoute, 
             UUID candidateBookingId, 
             List<String> evaluated, 
-            FeasibilityResult result) {
+            boolean emitEvents, FeasibilityResult result) {
         
         EvaluationTrace trace = new EvaluationTrace(
             traceId, 
@@ -157,7 +164,7 @@ public class TripFeasibilityEvaluator {
             result.rejectionDetails()
         );
 
-        if (log.isDebugEnabled()) {
+        if (emitEvents && log.isDebugEnabled()) {
             // Keep logging structured but concise. Avoid logging full list of stops to prevent noise.
             log.debug("Batching Decision [traceId={}, candidateBooking={}, feasible={}, constraintsEvaluated={}, reasonCode={}]", 
                 traceId, 

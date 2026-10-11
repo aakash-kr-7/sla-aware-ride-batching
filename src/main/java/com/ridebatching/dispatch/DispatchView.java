@@ -14,7 +14,9 @@ public record DispatchView(UUID tripId, TripStatus tripStatus, UUID assignedDriv
                            @Schema(description = "Current configured planning seat limit; not a historical snapshot or assigned driver's capacity.")
                            int planningCapacity,
                            @Schema(description = "Distinct current route booking IDs, in first-stop order. Cancelled riders removed from the route are absent.")
-                           List<UUID> bookingIds) {
+                           List<UUID> bookingIds,
+                           @Schema(description = "Optional read-only hypothetical comparison, populated only when candidateBookingId is supplied on single-trip GET. Not persisted decision history.", nullable = true)
+                           InsertionInspection insertionCheck) {
     public record Offer(UUID id, UUID driverId, DriverOfferStatus status,
                         Instant createdAt, Instant expiresAt, Instant updatedAt) {}
     public record Stop(int sequence, UUID bookingId, TripStopType type, GeoPoint location,

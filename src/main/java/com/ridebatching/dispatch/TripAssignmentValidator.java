@@ -24,6 +24,14 @@ public class TripAssignmentValidator {
     }
 
     public Check evaluate(Trip trip, Driver driver, Map<UUID, Booking> riders, Instant now) {
+        return evaluate(trip, driver, riders, now, true);
+    }
+
+    public Check inspect(Trip trip, Driver driver, Map<UUID, Booking> riders, Instant now) {
+        return evaluate(trip, driver, riders, now, false);
+    }
+
+    private Check evaluate(Trip trip, Driver driver, Map<UUID, Booking> riders, Instant now, boolean emitEvents) {
         if (trip.getStops().isEmpty()) return invalid(trip, now, "ASSIGNMENT_EMPTY_ROUTE", null);
         for (TripStop stop : trip.getStops()) {
             Booking rider = riders.get(stop.getBookingId());
@@ -31,8 +39,10 @@ public class TripAssignmentValidator {
                 return invalid(trip, now, "ASSIGNMENT_BOOKING_STATE", stop.getBookingId());
         }
         Instant firstPickup = timing.firstPickupAt(trip, driver.getLocation(), now);
-        return new Check(firstPickup, evaluator.evaluate(trip.getStops(), riders,
-                new Vehicle(driver.getId(), driver.getVehicleCapacity()), firstPickup, null));
+        Vehicle vehicle = new Vehicle(driver.getId(), driver.getVehicleCapacity());
+        return new Check(firstPickup, emitEvents
+                ? evaluator.evaluate(trip.getStops(), riders, vehicle, firstPickup, null)
+                : evaluator.inspect(trip.getStops(), riders, vehicle, firstPickup, null));
     }
 
     private Check invalid(Trip trip, Instant now, String reason, UUID booking) {

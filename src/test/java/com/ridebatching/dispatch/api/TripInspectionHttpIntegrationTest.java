@@ -19,6 +19,7 @@ import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.http.*;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.support.TransactionTemplate;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.*;
 import java.util.*;
 import static org.assertj.core.api.Assertions.*;
@@ -38,6 +39,7 @@ class TripInspectionHttpIntegrationTest extends AbstractPostgresIntegrationTest 
     @Autowired ServiceableZoneRepository zones;
     @Autowired TravelTimeEstimator estimator;
     @Autowired TransactionTemplate transaction;
+    @Autowired MeterRegistry metrics;
     @MockBean(name = "batchingClock") Clock batchingClock;
     @MockBean(name = "dispatchClock") Clock dispatchClock;
     private HttpHeaders admin;
@@ -135,13 +137,134 @@ class TripInspectionHttpIntegrationTest extends AbstractPostgresIntegrationTest 
                 login("inspection-approver", Role.APPROVER, null), new HttpHeaders())) {
             assertThat(response("/api/admin/dispatch/trips/" + id, denied).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
             assertThat(response("/api/admin/dispatch/trips", denied).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+            assertThat(response("/api/admin/dispatch/trips/" + id + "?candidateBookingId=" + UUID.randomUUID(), denied).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
         }
         JsonNode schema = http.getForObject("/v3/api-docs", JsonNode.class).path("components").path("schemas");
         assertThat(schema.path("DispatchView").path("properties").has("planningCapacity")).isTrue();
         assertThat(schema.path("DispatchView").path("properties").has("bookingIds")).isTrue();
         assertThat(schema.path("Stop").path("properties").has("pickupSlaDeadline")).isTrue();
         assertThat(schema.path("Stop").path("properties").has("withinPickupSla")).isTrue();
+        assertThat(schema.path("DispatchView").path("properties").has("insertionCheck")).isTrue();
+        assertThat(schema.path("RejectionReason").path("properties").has("estimatedPickupAt")).isTrue();
         assertThat(response("/api/admin/dispatch/trips/" + UUID.randomUUID(), admin).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test void rejectedSharingExplainsCapacityAndSlaWithoutChangingRoutesAssignmentsOrCounters() {
+        List<Booking> requests = fiveRequests(); trigger();
+        UUID sharedId = tripId(requests.get(0)), soloId = tripId(requests.get(4));
+        DispatchView before = get(sharedId), soloBefore = get(soloId);
+        Map<String, Double> countersBefore = counters();
+        InsertionInspection check = inspect(sharedId, requests.get(4).getId());
+        assertThat(check.feasible()).isFalse();
+        assertThat(check.proposedStops()).isEmpty();
+        assertThat(check.rejections()).extracting(InsertionInspection.RejectionReason::constraintCode).contains("CAPACITY", "PICKUP_SLA");
+        var capacity = check.rejections().stream().filter(r -> r.constraintCode().equals("CAPACITY")).findFirst().orElseThrow();
+        assertThat(capacity.examplePeakPassengers()).isGreaterThan(before.planningCapacity());
+        var sla = check.rejections().stream().filter(r -> r.constraintCode().equals("PICKUP_SLA")).findFirst().orElseThrow();
+        assertThat(sla.estimatedPickupAt()).isAfter(sla.pickupSlaDeadline());
+        assertThat(sla.affectedBooking()).isIn(requests.stream().map(Booking::getId).toArray());
+        assertThat(check.alternativesEvaluated()).isEqualTo(45); // All 9*10/2 insertion pairs fail.
+        assertThat(check.rejections().stream().mapToInt(InsertionInspection.RejectionReason::alternativesRejected).sum()).isEqualTo(45);
+        assertThat(get(sharedId)).isEqualTo(before);
+        assertThat(get(soloId)).isEqualTo(soloBefore);
+        assertThat(tripId(requests.get(4))).isEqualTo(soloId);
+        assertThat(counters()).isEqualTo(countersBefore);
+    }
+
+    @Test void twoUrgentRequestsExposeSlaRejectionDespiteFreeSeats() {
+        Booking a = pending(1, PICKUP, DROP, 90), b = pending(2, PICKUP, DROP, 90);
+        trigger(); assertThat(tripId(a)).isNotEqualTo(tripId(b));
+        InsertionInspection check = inspect(tripId(a), b.getId());
+        assertThat(check.feasible()).isFalse();
+        assertThat(check.alternativesEvaluated()).isEqualTo(6);
+        assertThat(check.rejections()).singleElement().satisfies(reason -> {
+            assertThat(reason.constraintCode()).isEqualTo("PICKUP_SLA");
+            assertThat(reason.examplePeakPassengers()).isLessThanOrEqualTo(2);
+            assertThat(reason.estimatedPickupAt()).isEqualTo(NOW.plusSeconds(120)); // Closest miss, rather than an hours-late sequential route.
+            assertThat(reason.pickupSlaDeadline()).isEqualTo(NOW.plusSeconds(90));
+        });
+    }
+
+    @Test void aFeasiblePreviewDoesNotAssignThePendingCandidateAndUsesCurrentTimeNotDecisionHistory() {
+        Booking a = pending(1, PICKUP, DROP, 400); trigger();
+        Booking b = pending(2, PICKUP, DROP, 400);
+        DispatchView before = get(tripId(a));
+        InsertionInspection check = inspect(tripId(a), b.getId());
+        assertThat(check.feasible()).isTrue();
+        assertThat(check.timingBasis()).isEqualTo("UNASSIGNED_CURRENT_TIME");
+        assertThat(check.evaluatedAt()).isEqualTo(NOW);
+        assertThat(check.proposedStops()).hasSize(4).extracting(DispatchView.Stop::sequence).containsExactly(1,2,3,4);
+        assertThat(check.proposedStops().stream().filter(s -> s.type() == TripStopType.PICKUP)).allMatch(DispatchView.Stop::withinPickupSla);
+        assertThat(get(tripId(a))).isEqualTo(before);
+        assertThat(bookings.findById(b.getId()).orElseThrow().getStatus()).isEqualTo(BookingStatus.PENDING);
+        assertThat(tripId(b)).isNull();
+        time(NOW.plusSeconds(401));
+        InsertionInspection later = inspect(tripId(a), b.getId());
+        assertThat(later.feasible()).isFalse();
+        assertThat(later.routeStartTime()).isEqualTo(NOW.plusSeconds(401));
+        assertThat(later.rejections()).extracting(InsertionInspection.RejectionReason::constraintCode).containsExactly("PICKUP_SLA");
+        assertThat(get(tripId(a)).stops()).isEqualTo(before.stops());
+    }
+
+    @Test void inspectionShowsRejectedCheaperAlternativesAlongsideTheCostlierFeasibleRoute() {
+        Booking a = pending(1, new GeoPoint(0, 0), new GeoPoint(0, .11), 360); trigger();
+        Booking b = pending(2, new GeoPoint(0, .01), new GeoPoint(0, .1), 60);
+        DispatchView before = get(tripId(a));
+        InsertionInspection check = inspect(tripId(a), b.getId());
+        assertThat(check.feasible()).isTrue();
+        assertThat(check.rejections()).extracting(InsertionInspection.RejectionReason::constraintCode).contains("PICKUP_SLA");
+        assertThat(check.proposedStops()).extracting(DispatchView.Stop::bookingId).containsExactly(b.getId(), a.getId(), b.getId(), a.getId());
+        assertThat(check.proposedStops().get(0).estimatedArrivalAt()).isEqualTo(NOW);
+        assertThat(check.proposedStops().get(1).estimatedArrivalAt()).isEqualTo(NOW.plusSeconds(300));
+        assertThat(check.proposedStops().get(1).withinPickupSla()).isTrue();
+        assertThat(get(tripId(a))).isEqualTo(before);
+    }
+
+    @Test void comparisonRejectsMissingAlreadyGroupedCancelledOrAssignedTripInputs() {
+        List<Booking> requests = fiveRequests(); trigger();
+        UUID sharedId = tripId(requests.get(0));
+        assertThat(comparisonResponse(sharedId, requests.get(0).getId()).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(comparisonResponse(sharedId, UUID.randomUUID()).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        HttpHeaders owner = new HttpHeaders(); owner.putAll(admin);
+        owner.set("X-Employee-Id", requests.get(4).getEmployee().getId().toString());
+        assertThat(http.exchange("/api/v1/bookings/" + requests.get(4).getId(), HttpMethod.DELETE, new HttpEntity<>(owner), JsonNode.class).getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(comparisonResponse(sharedId, requests.get(4).getId()).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        DispatchView planned = get(sharedId);
+        assertThat(http.postForEntity("/api/admin/dispatch/offers/" + planned.activeOfferId() + "/accept", new HttpEntity<>(admin), JsonNode.class).getStatusCode()).isEqualTo(HttpStatus.OK);
+        Booking pending = pending(6, PICKUP, DROP, 400);
+        var assigned = comparisonResponse(sharedId, pending.getId());
+        assertThat(assigned.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(assigned.getBody().path("code").asText()).isEqualTo("STATE_CONFLICT");
+    }
+
+    @Test void detourExamplesExposeTheHarmedRiderAndDurationsWithoutHidingAFeasibleAlternative() {
+        Booking shortRide = pending(1, PICKUP, new GeoPoint(.001, 0), 400); trigger();
+        Booking longRide = pending(2, PICKUP, DROP, 400);
+        InsertionInspection check = inspect(tripId(shortRide), longRide.getId());
+        assertThat(check.feasible()).isTrue();
+        var detour = check.rejections().stream().filter(r -> r.constraintCode().equals("RELATIVE_DETOUR")).findFirst().orElseThrow();
+        assertThat(detour.affectedBooking()).isEqualTo(shortRide.getId());
+        assertThat(detour.directTravelSeconds()).isEqualTo(estimator.estimateTravelTime(PICKUP, shortRide.getDropoffLocation()).getSeconds());
+        assertThat(detour.sharedTravelSeconds()).isGreaterThan(2 * detour.directTravelSeconds());
+        assertThat(check.proposedStops()).hasSize(4);
+        assertThat(tripId(longRide)).isNull();
+    }
+
+    private InsertionInspection inspect(UUID trip, UUID candidate) {
+        var result = http.exchange("/api/admin/dispatch/trips/" + trip + "?candidateBookingId=" + candidate,
+                HttpMethod.GET, new HttpEntity<>(admin), DispatchView.class);
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+        return result.getBody().insertionCheck();
+    }
+    private ResponseEntity<JsonNode> comparisonResponse(UUID trip, UUID candidate) {
+        return response("/api/admin/dispatch/trips/" + trip + "?candidateBookingId=" + candidate, admin);
+    }
+    private Map<String, Double> counters() {
+        Map<String, Double> result = new TreeMap<>();
+        for (String name : List.of("batching.sla_rejections", "batching.detour_rejections", "dispatch.offers", "dispatch.acceptances")) {
+            var counter = metrics.find(name).counter(); result.put(name, counter == null ? 0 : counter.count());
+        }
+        return result;
     }
 
     private void time(Instant now) { when(batchingClock.instant()).thenReturn(now); when(dispatchClock.instant()).thenReturn(now); }

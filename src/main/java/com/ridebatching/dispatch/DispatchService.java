@@ -35,6 +35,7 @@ public class DispatchService {
     private final TripRouteTiming timing;
     private final BookingRepository bookings;
     private final com.ridebatching.batching.BatchPlanner planner;
+    private final TripInsertionInspector insertionInspector;
     private final Duration lifetime;
     private final int attemptLimit;
     @PersistenceContext private EntityManager entityManager;
@@ -44,6 +45,7 @@ public class DispatchService {
                            RejectionCoolOffPolicy coolOff, TripRepository trips, MeterRegistry metrics,
                            TripAssignmentValidator assignment, TripRouteTiming timing, BookingRepository bookings,
                            com.ridebatching.batching.BatchPlanner planner,
+                           TripInsertionInspector insertionInspector,
                            @Qualifier("dispatchClock") Clock clock,
                            @Value("${dispatch.offer-lifetime:PT2M}") Duration lifetime,
                            @Value("${dispatch.max-offers-per-trip:3}") int attemptLimit) {
@@ -52,6 +54,7 @@ public class DispatchService {
         this.drivers = drivers; this.offers = offers; this.eligibility = eligibility;
         this.ranker = ranker; this.coolOff = coolOff; this.trips = trips; this.metrics = metrics;
         this.assignment = assignment; this.timing = timing; this.bookings = bookings; this.planner = planner;
+        this.insertionInspector = insertionInspector;
         this.clock = clock; this.lifetime = lifetime; this.attemptLimit = attemptLimit;
     }
 
@@ -175,6 +178,17 @@ public class DispatchService {
     }
 
     @Transactional(readOnly = true)
+    public DispatchView getTrip(UUID id, UUID candidateBookingId) {
+        Trip trip = trips.findById(id).orElseThrow(() -> new DispatchNotFoundException("Trip not found"));
+        Instant now = clock.instant();
+        Map<UUID, Booking> riders = routeBookings(trip);
+        InsertionInspection check = candidateBookingId == null ? null : insertionInspector.inspect(trip,
+                bookings.findById(candidateBookingId).orElseThrow(() ->
+                        new com.ridebatching.booking.exception.BookingNotFoundException("Candidate booking not found")), riders, now);
+        return view(trip, now, riders, check);
+    }
+
+    @Transactional(readOnly = true)
     public Page<DispatchView> listTrips(int page, int size) {
         if (page < 0 || size < 1 || size > 100) throw new IllegalArgumentException("Page size must be 1..100");
         Instant now = clock.instant();
@@ -183,7 +197,10 @@ public class DispatchService {
     }
 
     private DispatchView view(Trip trip, Instant now) {
-        Map<UUID, Booking> riders = routeBookings(trip);
+        return view(trip, now, routeBookings(trip), null);
+    }
+
+    private DispatchView view(Trip trip, Instant now, Map<UUID, Booking> riders, InsertionInspection check) {
         List<DriverOffer> history = history(trip.getId());
         DriverOffer active = history.stream().filter(o -> o.getStatus() == DriverOfferStatus.OFFERED).findFirst().orElse(null);
         DispatchOutcome outcome;
@@ -200,7 +217,7 @@ public class DispatchService {
             // Ignore temporary cool-off here: an attempted driver is never offered this trip again.
             boolean availableUntried = drivers.findAll().stream().anyMatch(d -> !attempted.contains(d.getId())
                     && eligibility.evaluate(d).isEligible() && d.getVehicleCapacity() >= trip.getPeakPassengers()
-                    && assignment.evaluate(trip, d, riders, now).feasible());
+                    && assignment.inspect(trip, d, riders, now).feasible());
             outcome = availableUntried ? DispatchOutcome.READY_FOR_RETRY
                     : history.isEmpty() ? DispatchOutcome.NO_ELIGIBLE_DRIVER : DispatchOutcome.DRIVERS_EXHAUSTED;
         }
@@ -213,7 +230,7 @@ public class DispatchService {
                     Boolean within = deadline == null || s.getEstimatedArrivalAt() == null ? null : !s.getEstimatedArrivalAt().isAfter(deadline);
                     return new DispatchView.Stop(s.getSequenceOrder(), s.getBookingId(), s.getType(), s.getLocation(), s.getEstimatedArrivalAt(), deadline, within);
                 }).toList(), planner.getDefaultVehicleCapacity(),
-                trip.getStops().stream().map(TripStop::getBookingId).distinct().toList());
+                trip.getStops().stream().map(TripStop::getBookingId).distinct().toList(), check);
     }
 
     private List<DriverOffer> history(UUID tripId) {
