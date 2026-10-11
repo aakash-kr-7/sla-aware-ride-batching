@@ -31,12 +31,12 @@ class LocalFixturesIntegrationTest extends AbstractPostgresIntegrationTest {
 
     @Test void loadsUsableIdentitiesAndReferenceDataWithoutBookings() {
         fixtures.run();
-        assertThat(employees.count()).isEqualTo(5);
-        assertThat(accounts.count()).isEqualTo(6);
+        assertThat(employees.count()).isEqualTo(9);
+        assertThat(accounts.count()).isEqualTo(10);
         assertThat(zones.count()).isEqualTo(2);
         assertThat(drivers.count()).isEqualTo(4);
         assertThat(bookings.count()).isZero();
-        for (int number = 1; number <= 5; number++) {
+        for (int number = 1; number <= 9; number++) {
             UserAccount account = accounts.findByUsername("local-rider-" + number).orElseThrow();
             assertThat(account.getEmployeeId()).isEqualTo(LocalFixtures.id(number));
             assertThat(account.getRole()).isEqualTo(Role.EMPLOYEE);
@@ -52,7 +52,7 @@ class LocalFixturesIntegrationTest extends AbstractPostgresIntegrationTest {
         driver.goOffline(); drivers.saveAndFlush(driver);
         String hash = accounts.findByUsername("local-admin").orElseThrow().getPasswordHash();
         fixtures.run();
-        assertThat(accounts.count()).isEqualTo(6);
+        assertThat(accounts.count()).isEqualTo(10);
         assertThat(accounts.findByUsername("local-admin").orElseThrow().getPasswordHash()).isEqualTo(hash);
         assertThat(drivers.findById(LocalFixtures.id(101)).orElseThrow().getStatus()).isEqualTo(DriverStatus.OFFLINE);
     }
@@ -66,7 +66,7 @@ class LocalFixturesIntegrationTest extends AbstractPostgresIntegrationTest {
         fixtures.run();
         accounts.deleteById(LocalFixtures.id(95));
         assertThatThrownBy(() -> fixtures.run()).isInstanceOf(IllegalStateException.class).hasMessageContaining("incomplete or changed");
-        assertThat(accounts.count()).isEqualTo(5);
+        assertThat(accounts.count()).isEqualTo(9);
     }
 
     @Test void aPartialSeedFailureRollsBackAndCanBeRetried() {
@@ -79,7 +79,7 @@ class LocalFixturesIntegrationTest extends AbstractPostgresIntegrationTest {
             assertThat(drivers.count()).isZero();
         } finally { reset(encoder); }
         fixtures.run();
-        assertThat(accounts.count()).isEqualTo(6);
+        assertThat(accounts.count()).isEqualTo(10);
     }
 
     @Test void refusesADifferentDatabaseBeforeWritingAnything() {

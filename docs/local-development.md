@@ -21,7 +21,7 @@ Start the application in that directory. Keep this terminal open:
 
 Wait for `Local fixtures loaded` (or `Local reference data already exists`). First startup downloads Maven dependencies and runs all Flyway migrations. No `.env`, private files or SQL editing is needed for this path.
 
-Open the [browser walkthrough](http://127.0.0.1:8080/) to exercise the workflow one click at a time, or [Swagger UI](http://127.0.0.1:8080/swagger-ui/index.html) for the complete API. The [page guide](reviewer-ui.md) explains its eight stages and inspection controls. Choose the browser path or the Python path on a fresh database; both save real business state.
+Open the [browser walkthrough](http://127.0.0.1:8080/) to exercise the workflow one click at a time, or [Swagger UI](http://127.0.0.1:8080/swagger-ui/index.html) for the complete API. The [page guide](reviewer-ui.md) explains the guided example, editable scenarios and trip controls. Choose the browser path or the Python path on a fresh database; both save real business state.
 
 For the automated Python path, in a second terminal, from the repository root:
 
@@ -40,9 +40,9 @@ All accounts below use **`local-only-password`**. These are disposable local cre
 | Identity | Role / employee ID |
 | --- | --- |
 | `local-admin` | ADMIN; no employee association |
-| `local-rider-1` through `local-rider-5` | EMPLOYEE; `00000000-0000-0000-0000-000000000001` through `00000000-0000-0000-0000-000000000005` |
+| `local-rider-1` through `local-rider-9` | EMPLOYEE; `00000000-0000-0000-0000-000000000001` through `00000000-0000-0000-0000-000000000009` |
 
-The loader creates five employees, six BCrypt-backed accounts, two active pickup zones and four drivers. **It creates no bookings or trips.** Restarting retains existing rides and driver state; it does not reset them.
+The loader creates nine employees, ten BCrypt-backed accounts, two active pickup zones and four drivers. **It creates no bookings or trips.** Restarting retains existing rides and driver state; it does not reset them.
 
 | Reference | Configuration |
 | --- | --- |
@@ -53,7 +53,7 @@ The loader creates five employees, six BCrypt-backed accounts, two active pickup
 | Driver `00000000-0000-0000-0000-000000000067` | Available, two seats; cannot serve the four-rider route |
 | Driver `00000000-0000-0000-0000-000000000068` | Offline, four seats; ineligible |
 
-The walkthrough uses the central pickup and destination `(12.8000, 77.5946)`. Different employees make the five requests logically distinct. The long common journey prevents seat turnover before the remaining pickup promises, so four seats produce a real four-plus-one split. Shorter journeys with generous deadlines can legitimately serve five bookings in one trip.
+The walkthrough uses the central pickup and destination `(12.8000, 77.5946)`. Different employees make the five requests logically distinct. The long common journey prevents seat turnover before the remaining pickup promises, so four seats produce a real four-plus-one split. Shorter journeys with generous deadlines can legitimately serve five bookings in one trip. The browser also supports nine requests using the same fleet; the default long journey normally produces four-plus-four-plus-one. Initial offers can name the same driver on different trips because an offer is not a reservation. Accept one, then advance the competing route to consider the next driver.
 
 ### Isolation and policy differences
 
@@ -85,7 +85,7 @@ docker compose -f compose.local.yml down --volumes
 docker compose -f compose.local.yml up -d --wait
 ```
 
-Then restart the application with `local-fixtures` and rerun the Python command. Removing the volume deletes these disposable rides and accounts. It does not target the normal Compose project or any private setup.
+Then restart the application with `local-fixtures` and use the browser or Python walkthrough. An older five-employee fixture database also needs this reset after upgrading; the loader refuses to overwrite existing rides or silently repair an incomplete fixture set. Removing the volume deletes these disposable rides and accounts. It does not target the normal Compose project or any private setup.
 
 ## Normal configuration, without fixtures
 
@@ -115,7 +115,7 @@ set +a
 ./mvnw spring-boot:run
 ```
 
-Normal startup creates no employees, accounts, zones or drivers. There is no reference-data CRUD/registration API. The separate `local` profile can create only an admin, on an empty account table, when `LOCAL_ADMIN_ENABLED=true` and username/password are supplied; start with `-Dspring-boot.run.profiles=local`. The complete reviewer setup above is the easiest public path to usable booking data.
+Normal startup creates no employees, accounts, zones or drivers. There is no reference-data CRUD/registration API. The separate `local` profile can create only an admin, on an empty account table, when `LOCAL_ADMIN_ENABLED=true` and username/password are supplied; start with `-Dspring-boot.run.profiles=local`. The fixture setup above is the easiest public path to usable booking data.
 
 ## Common failures
 
@@ -125,8 +125,8 @@ Normal startup creates no employees, accounts, zones or drivers. There is no ref
 | Port already used | Stop the process using 8080 or the local database using 55433. Changing ports also requires matching application/script configuration. |
 | Login fails | Confirm `local-fixtures` was selected and the fixture-loaded log appeared; use the disposable credentials above. |
 | Walkthrough finds existing bookings | Stop the app, reset only the local Compose volume, and restart. Startup intentionally preserves state. |
-| Batching considers zero | Normal runtime waits for closed windows or the five-minute urgency guard. The reviewer profile uses a 20-minute guard; it still respects window grouping and expiration. |
+| Batching considers zero | Normal runtime waits for closed windows or the five-minute urgency guard. The fixture profile uses a 20-minute guard; it still respects window grouping and expiration. |
 | Offer expired / route infeasible | Do not reuse an old offer ID. Inspect the trip and use Advance where an untried feasible driver remains, or reset for a repeatable walkthrough. |
-| HTTP 400 in a browser | Open `/` for the reviewer page or `/swagger-ui/index.html` for Swagger on `127.0.0.1`. If Tomcat reports request parsing failure before the app runs, try a clean browser session or clear localhost cookies. |
+| HTTP 400 in a browser | Open `/` for the browser demo or `/swagger-ui/index.html` for Swagger on `127.0.0.1`. If Tomcat reports request parsing failure before the app runs, try a clean browser session or clear localhost cookies. |
 
 Run `./mvnw clean verify` (Windows: `.\mvnw.cmd clean verify`) for the build and full tests. Tests use disposable Testcontainers PostgreSQL, not this Compose database, and require no fixture startup.

@@ -22,6 +22,7 @@ import java.util.UUID;
 @Profile("local-fixtures")
 public class LocalFixtures implements CommandLineRunner {
     public static final String PASSWORD = "local-only-password";
+    public static final int RIDER_COUNT = 9;
     private static final Logger log = LoggerFactory.getLogger(LocalFixtures.class);
     private final JdbcTemplate jdbc;
     private final EmployeeRepository employees;
@@ -65,13 +66,13 @@ public class LocalFixtures implements CommandLineRunner {
                         + "Reset only the ride-batching-local Compose volume to start again.");
             }
         }
-        for (int number = 1; number <= 5; number++) {
+        for (int number = 1; number <= RIDER_COUNT; number++) {
             employees.save(new Employee(id(number), "LOCAL-" + number, "Local rider " + number,
                     "rider" + number + "@example.invalid"));
         }
         employees.flush();
         accounts.save(new UserAccount(id(90), "local-admin", encoder.encode(PASSWORD), Role.ADMIN, null));
-        for (int number = 1; number <= 5; number++) {
+        for (int number = 1; number <= RIDER_COUNT; number++) {
             accounts.save(new UserAccount(id(90 + number), "local-rider-" + number,
                     encoder.encode(PASSWORD), Role.EMPLOYEE, id(number)));
         }
@@ -81,7 +82,7 @@ public class LocalFixtures implements CommandLineRunner {
         addDriver(102, "Local backup driver", 4, 12.9800, true);
         addDriver(103, "Local two-seat driver", 2, 12.9716, true);
         addDriver(104, "Local offline driver", 4, 12.9716, false);
-        log.info("Local fixtures loaded: five employee accounts, one admin, two zones and four drivers. "
+        log.info("Local fixtures loaded: nine employee accounts, one admin, two zones and four drivers. "
                 + "No bookings or trips created. Credentials are disposable; see docs/local-development.md.");
     }
 
@@ -96,8 +97,9 @@ public class LocalFixtures implements CommandLineRunner {
         UserAccount admin = accounts.findById(id(90)).orElseThrow();
         boolean complete = "local-admin".equals(admin.getUsername()) && admin.getRole() == Role.ADMIN
                 && encoder.matches(PASSWORD, admin.getPasswordHash())
-                && zones.count() == 2 && employees.count() == 5 && drivers.count() == 4 && accounts.count() == 6;
-        for (int number = 1; number <= 5; number++) {
+                && zones.count() == 2 && employees.count() == RIDER_COUNT && drivers.count() == 4
+                && accounts.count() == RIDER_COUNT + 1;
+        for (int number = 1; number <= RIDER_COUNT; number++) {
             UserAccount rider = accounts.findById(id(90 + number)).orElse(null);
             complete &= employees.existsById(id(number)) && rider != null
                     && ("local-rider-" + number).equals(rider.getUsername())
