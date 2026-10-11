@@ -1,27 +1,17 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="460" viewBox="0 0 1120 460" role="img" aria-labelledby="title desc">
-  <title id="title">Cheapest route versus cheapest feasible route</title>
-  <desc id="desc">Regression-test illustration. The 222-second route picks up B at 111 seconds, after B's 50-second deadline. The 333-second route picks up B immediately and A at 111 seconds, before A's 120-second deadline. The test uses its own estimator and generous detour settings.</desc>
-  <rect width="1120" height="460" rx="18" fill="#f8fafc"/>
-  <g font-family="Arial, sans-serif">
-    <text x="40" y="48" font-size="24" font-weight="700" fill="#0f172a">A slightly longer route can be the valid route.</text>
-    <text x="40" y="78" font-size="15" fill="#475569">Regression fixture: A must be picked up by +120 s; B by +50 s.</text>
-    <rect x="40" y="108" width="1040" height="121" rx="12" fill="#fff7ed" stroke="#fed7aa"/>
-    <text x="60" y="140" font-size="18" font-weight="700" fill="#9a3412">Cheapest insertion · total 222 s · rejected</text>
-    <path d="M86 177 H980" stroke="#fdba74" stroke-width="3"/>
-    <g fill="#9a3412"><circle cx="86" cy="177" r="6"/><circle cx="395" cy="177" r="6"/><circle cx="705" cy="177" r="6"/><circle cx="980" cy="177" r="6"/></g>
-    <text x="60" y="207" font-size="14" fill="#334155">A pickup +0</text>
-    <text x="326" y="207" font-size="14" font-weight="700" fill="#9a3412">B pickup +111: late</text>
-    <text x="664" y="207" font-size="14" fill="#334155">B dropoff</text>
-    <text x="922" y="207" font-size="14" fill="#334155">A dropoff</text>
-    <rect x="40" y="249" width="1040" height="121" rx="12" fill="#ecfdf5" stroke="#a7f3d0"/>
-    <text x="60" y="281" font-size="18" font-weight="700" fill="#065f46">Cheapest feasible insertion · total 333 s · accepted</text>
-    <path d="M86 318 H980" stroke="#6ee7b7" stroke-width="3"/>
-    <g fill="#065f46"><circle cx="86" cy="318" r="6"/><circle cx="395" cy="318" r="6"/><circle cx="705" cy="318" r="6"/><circle cx="980" cy="318" r="6"/></g>
-    <text x="60" y="348" font-size="14" fill="#334155">B pickup +0</text>
-    <text x="321" y="348" font-size="14" font-weight="700" fill="#065f46">A pickup +111: on time</text>
-    <text x="664" y="348" font-size="14" fill="#334155">B dropoff</text>
-    <text x="922" y="348" font-size="14" fill="#334155">A dropoff</text>
-    <text x="40" y="409" font-size="14" fill="#475569">Illustration, not a scaled timeline. Values come from FeasibleInsertionRegressionTest.</text>
-    <text x="40" y="434" font-size="14" fill="#475569">Test settings: circuity 1, speed 36 km/h, dwell 0, relative detour 300%; runtime defaults differ.</text>
-  </g>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="390" viewBox="0 0 760 390" role="img" aria-labelledby="title desc">
+<title id="title">Search for the cheapest feasible route</title><desc id="desc">In FeasibleInsertionRegressionTest, a 222-second insertion picks up B at 111 seconds and misses B's 50-second deadline. A 333-second insertion picks up B immediately and A at 111 seconds, within A's 120-second deadline.</desc>
+<rect width="760" height="390" fill="#f5f6f4"/>
+<g font-family="Segoe UI,Arial,sans-serif" fill="#192e2b">
+<text x="28" y="40" font-size="23" font-weight="700">The shortest insertion can miss a deadline</text><text x="28" y="69" font-size="16" fill="#536762">A: pickup by +120 s. B: pickup by +50 s.</text>
+<rect x="28" y="95" width="704" height="106" rx="6" fill="#fff4eb" stroke="#d9bda4"/>
+<text x="48" y="125" font-size="18" font-weight="600">222 s total · rejected</text>
+<path d="M70 151H680" stroke="#a66c25" stroke-width="2"/>
+<g fill="#a66c25"><circle cx="70" cy="151" r="5"/><circle cx="275" cy="151" r="5"/><circle cx="480" cy="151" r="5"/><circle cx="680" cy="151" r="5"/></g>
+<text x="48" y="182" font-size="15">A pickup +0 s</text><text x="211" y="182" font-size="15" fill="#8c451b">B pickup +111 s</text><text x="444" y="182" font-size="15">B dropoff</text><text x="643" y="182" font-size="15">A dropoff</text>
+<rect x="28" y="218" width="704" height="106" rx="6" fill="#e4eee7" stroke="#b9c9bf"/>
+<text x="48" y="248" font-size="18" font-weight="600">333 s total · feasible</text>
+<path d="M70 274H680" stroke="#196b55" stroke-width="2"/>
+<g fill="#196b55"><circle cx="70" cy="274" r="5"/><circle cx="275" cy="274" r="5"/><circle cx="480" cy="274" r="5"/><circle cx="680" cy="274" r="5"/></g>
+<text x="48" y="305" font-size="15">B pickup +0 s</text><text x="211" y="305" font-size="15">A pickup +111 s</text><text x="444" y="305" font-size="15">B dropoff</text><text x="643" y="305" font-size="15">A dropoff</text>
+<text x="28" y="353" font-size="14" fill="#536762">Regression-test illustration; stop spacing is schematic, not elapsed time.</text><text x="28" y="376" font-size="14" fill="#536762">Test: 36 km/h, circuity 1, no dwell, 300% relative detour. Runtime defaults differ.</text>
+</g></svg>

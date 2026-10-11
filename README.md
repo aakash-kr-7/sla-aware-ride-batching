@@ -1,71 +1,12 @@
-# SLA-Aware Ride Batching
+# SLA-aware ride batching
 
-A Java backend that groups employee ride requests into shared trips while enforcing estimated pickup deadlines, seat capacity and rider detour limits.
+A Java backend for employee ride pooling. It groups compatible requests into shared trips, checks seat capacity, pickup deadlines and detour limits, then coordinates driver offers and assignment.
 
-**Start here:** [run from a fresh clone](docs/local-development.md) · [inspect a real workflow](docs/reviewer-guide.md) · [requirements and evidence](docs/requirements-traceability.md)
+[Run locally](docs/local-development.md) · [Browser demo](docs/reviewer-ui.md) · [Requirements and tests](docs/requirements-traceability.md)
 
-## The problem
+## Run and try it
 
-Ad-hoc employee pickups can create unnecessary cab journeys. Nearby pickups and similar destinations suggest sharing, but the extra stops may delay a rider, exceed seats or cause an unacceptable detour. This project implements the backend for the On-Demand Ride Batching case study.
-
-**Batching is an optimization. SLA, capacity and correctness are hard constraints.** A shared route must pass all three for every rider. If no insertion fits, the planner evaluates a separate trip. If even a solo pickup promise is already missed, the request stays pending with a persisted SLA issue rather than receiving a false confirmation.
-
-## What works
-
-| Area | Behaviour |
-| --- | --- |
-| Booking | Authenticated creation, pickup-zone validation, logical deduplication, retrieval and cancellation |
-| Collection | Bounded PostgreSQL claims; fixed UTC windows; urgent release; zone/direction grouping |
-| Planning | Cheapest feasible insertion, four-seat occupancy, pickup SLA and relative/absolute detour checks |
-| Dispatch | Initial eligible-driver offer, rejection/cool-off, next untried driver, expiry, bounded attempts and atomic acceptance |
-| Lifecycle | Late insertion into planned trips; cancellation replan; ordered pickup/dropoff and driver release |
-| Inspection | Grouped booking IDs, ordered stops, occupancy, saved pickup estimates/deadlines and hypothetical rejection examples |
-| Operations | Health/readiness, Micrometer/Prometheus, correlation logging and persisted open SLA issues |
-
-Driver responses and execution are **authenticated admin simulations**. There is no separate driver app or notification delivery. An interactive console at `/` provides a clean walkthrough of the backend flow, while Swagger UI provides the complete API reference.
-
-## Architecture
-
-![Application boundaries and durable state](docs/assets/system-overview.svg)
-
-One Spring Boot process coordinates booking, planning and dispatch. PostgreSQL owns durable state, locks and uniqueness; Caffeine caches only active service zones. No external routing provider or messaging infrastructure is required. [Code boundaries and transaction flow](docs/architecture.md).
-
-## Batching algorithm
-
-1. Capture one cycle time; separately escalate expired pending requests.
-2. Claim at most 100 eligible pending bookings using `FOR UPDATE SKIP LOCKED`.
-3. Partition by 15-minute source window, active pickup zone and compatible leader bearing.
-4. Process each cluster by pickup deadline. Explore pickup/dropoff insertion positions while preserving existing stop order.
-5. Choose the cheapest insertion that passes structure, peak occupancy, every pickup deadline and every rider's detour. Otherwise try a solo route.
-6. Persist routes, booking confirmations and initial driver offers in one transaction.
-
-An open window releases a request early when its pickup deadline is within the five-minute urgency guard. Manual triggers respect that policy. Capacity bounds **simultaneous riders**, not total bookings: turnover can allow more than four bookings on a four-seat route. [Boundary rules](docs/batching-strategy.md) · [search and ETA](docs/planner-and-eta.md) · [complexity](docs/algorithm-analysis.md).
-
-## Correctness under concurrency
-
-- A partial unique index arbitrates active logical duplicates. `INSERT ON CONFLICT` lets the losing request return the existing booking without poisoning its transaction.
-- Batching workers claim different rows with `SKIP LOCKED`; route creation and confirmation commit together.
-- Late insertion locks and reloads the selected trip, then repeats feasibility against its current riders.
-- Acceptance locks trip, offer and driver, rechecks current approach/SLA/capacity/detour, and commits the matching assignment atomically. Provisional offers do not reserve a driver.
-- Cancellation removes only the affected rider's stops, recomputes that route's estimates and leaves unrelated trips unchanged. It closes for the whole trip at first pickup.
-
-PostgreSQL integration tests force competing operations into real lock waits and inspect committed state. They cover concrete races and rollback, not every possible interleaving or crash recovery. [Mechanisms, evidence and failure policy](docs/failure-modes.md).
-
-## Technology choices
-
-| Choice | Reason |
-| --- | --- |
-| Java 17 / Spring Boot 3 | One application with explicit HTTP, security and transaction boundaries |
-| PostgreSQL 16 / Flyway / JPA | Database constraints and row locks arbitrate races; migrations own schema and Hibernate validates it |
-| Testcontainers / JUnit 5 | Exercise the same database semantics rather than substituting an in-memory database |
-| Caffeine | Small, local active-zone cache; mutable assignments remain transactional |
-| Springdoc / Actuator / Micrometer | Inspect API contracts and operational signals; a dependency-free reviewer page makes the workflow easier to follow |
-
-CI builds on Java 21; Java 17 remains the compilation target. Maven Wrapper pins the build tooling.
-
-## Run from a fresh clone
-
-Prerequisites: JDK 17+, Docker with Compose, and Python 3.10+ for the HTTP walkthrough. No `.env` or private files are needed for the disposable setup.
+You need JDK 17+ and Docker with Compose. The local profile supplies disposable accounts, pickup zones and drivers; it creates no rides until you send requests.
 
 ```sh
 git clone https://github.com/aakash-kr-7/sla-aware-ride-batching.git
@@ -73,7 +14,7 @@ cd sla-aware-ride-batching
 docker compose -f compose.local.yml up -d --wait
 ```
 
-Keep the application running in this terminal:
+Keep the application running in a terminal:
 
 ```powershell
 # Windows PowerShell
@@ -82,57 +23,83 @@ Keep the application running in this terminal:
 
 Linux/macOS: `./mvnw spring-boot:run -Dspring-boot.run.profiles=local-fixtures`.
 
-Open the [backend walkthrough](http://127.0.0.1:8080/) or [Swagger UI](http://127.0.0.1:8080/swagger-ui/index.html). The explicit fixture profile supplies disposable accounts, zones and drivers in its own local database. **Normal startup creates no business fixtures.** This profile changes only the local urgent lead time and offer lifetime to make a short walkthrough practical; hard route constraints remain enabled. [Credentials, policy differences, normal startup and reset](docs/local-development.md).
+Open the [browser demo](http://127.0.0.1:8080/), select **Use local credentials**, then **Connect**.
 
-## Run tests
+- **Guided example:** five riders, duplicate handling, invalid pickup, a four-plus-one split, driver rejection and acceptance, then cancellation of one rider.
+- **Your scenario:** edit up to nine journeys and send requests together. Run batching, inspect the routes, accept or reject offers, and record pickups/dropoffs from each trip. On a fresh database the default long journey normally produces **4 + 4 + 1**. Different inputs can produce different outcomes.
+- **[Swagger UI](http://127.0.0.1:8080/swagger-ui/index.html):** all endpoints, schemas and error contracts. Its authorization is separate from the browser demo.
+
+The fixture fleet starts with two four-seat drivers and one two-seat driver available, plus one offline driver. An offer does not reserve a driver: competing trips can initially offer the same cab, and acceptance checks its current availability under locks. There is no driver app; response and execution controls are authenticated admin simulations.
+
+[Captured nine-rider run](docs/assets/nine-rider-demo.png): three dispatched trips assigned to three different cabs, before cancellation or execution.
+
+For a repeatable run, use a fresh local database. [Setup, accounts, policy differences and reset commands](docs/local-development.md).
+
+## How it works
+
+![Booking, planning and dispatch in one application](docs/assets/system-overview.svg)
+
+One Spring Boot application owns the workflow. PostgreSQL stores bookings, routes, offers and SLA issues; its constraints and locks coordinate concurrent writes. Caffeine caches the active pickup-zone list.
+
+1. Validate the employee and pickup zone. Deduplicate by employee, normalized endpoints and UTC slot. A new request can join an existing planned trip through late insertion.
+2. Claim at most 100 eligible pending requests using `FOR UPDATE SKIP LOCKED`. Partition by source window, pickup zone and compatible direction.
+3. Try pickup/dropoff insertion positions while preserving existing stop order. Choose the cheapest insertion that passes capacity, every pickup deadline and every rider's detour limits. If none fits, evaluate a separate trip.
+4. Save routes, confirmations and initial offers in one transaction. Driver acceptance rechecks approach time and route feasibility before committing assignment.
+5. Before execution, cancellation removes the affected rider's stops and recalculates that route. Ordered pickups and dropoffs advance the trip and release the driver on completion.
+
+Four seats limit **simultaneous passengers**, not total bookings with seat turnover. A solo request whose pickup promise is already missed remains pending with a saved SLA issue. [Planning rules](docs/batching-strategy.md) · [ETA and insertion search](docs/planner-and-eta.md).
+
+## Engineering decisions
+
+| Decision | Reason |
+| --- | --- |
+| Feature-first Spring Boot monolith | Keep HTTP, domain rules and transaction ownership easy to follow without adding service boundaries |
+| PostgreSQL, Flyway and JPA | Use database constraints and row locks for identity and assignment; migrations own the schema |
+| Greedy feasible insertion | Make candidate routes and rejection reasons inspectable; accept a longer valid route over a shorter invalid one |
+| Caffeine for zones only | Cache reference reads without making mutable assignment correctness depend on cached state |
+| Testcontainers and JUnit | Verify real PostgreSQL conflict, locking and rollback behaviour |
+
+A losing duplicate insert returns the existing booking. Batching workers claim separate rows. Late insertion reloads the locked trip before rechecking all riders. Acceptance locks trip, offer and driver. Cancellation changes only its associated route. [Concurrency and recovery](docs/failure-modes.md) links each mechanism to its tests.
+
+Java 17 is the compilation target; CI uses Java 21. Maven Wrapper pins the build tool. The browser uses plain HTML, CSS and JavaScript served by Spring Boot, with no separate frontend build.
+
+## Tests and repeatable walkthrough
 
 ```powershell
-.\mvnw.cmd clean verify
+.\mvnw.cmd --batch-mode clean verify
 ```
 
-Linux/macOS: `./mvnw clean verify`. Docker must be running; PostgreSQL Testcontainers start automatically. No Compose fixture database or credentials are required. CI runs the same clean build/test lifecycle. [Test matrix and focused commands](docs/test-matrix.md).
+Linux/macOS: `./mvnw --batch-mode clean verify`. Docker must be running. Tests create their own PostgreSQL Testcontainers and need no local fixture database. CI runs the same lifecycle.
 
-## Quick review
+The suite covers normal requests, boundary inputs, rollback and competing operations, including duplicate creation, overlapping batch workers, late insertion, driver acceptance and cancellation races. [Test matrix](docs/test-matrix.md).
 
-For an interactive browser walkthrough, open `http://127.0.0.1:8080/`, click **Auto-fill Test Credentials**, and click **Connect & Sign In**. Follow the 8 sequential stages: each action executes live backend APIs, displaying real routes, capacity limits, pickup deadlines, and driver offers in real time. A top-right button links directly to Swagger UI at any time. [Console Guide](docs/reviewer-ui.md).
-
-The browser and Python paths both mutate the same database. Choose one on a fresh setup; reset database volume before repeating the scenario.
-
-For the automated path, in a second terminal at the repository root:
+An optional Python 3.10+ walkthrough sends HTTP requests and checks the five-rider scenario:
 
 ```sh
 python scripts/local-review.py
 ```
 
-This uses real HTTP requests and asserts five distinct bookings, deduplication, a useful zone error, **four-plus-one**, capacity/SLA rejection examples, rejection selecting another driver, acceptance, cancellation isolation and metrics. Actual responses go to ignored `target/local-review/`; no outputs are fabricated or committed.
+Use `--pause` for inspection points during a presentation. Responses are written to ignored `target/local-review/`; passwords and tokens are not saved. Choose this path or the browser example on a fresh database. [Walkthrough and explanation guide](docs/reviewer-guide.md).
 
-For a 6–10 minute explanation, use `--pause` on a fresh local database and follow the [review guide](docs/reviewer-guide.md). It identifies the Swagger fields and screenshots worth capturing. The default run finishes with three riders on the affected trip after cancellation; saved responses retain the earlier four-plus-one state.
+## Repository guide
 
-## Documentation map
-
-| Read this | To understand |
+| Location | Contents |
 | --- | --- |
-| [Local setup](docs/local-development.md), [review guide](docs/reviewer-guide.md), [browser walkthrough](docs/reviewer-ui.md) | Start, inspect, record and reset the public workflow |
-| [Architecture](docs/architecture.md), [domain model](docs/domain-model.md) | Packages, relationships and reachable states |
-| [Batching strategy](docs/batching-strategy.md), [planner and ETA](docs/planner-and-eta.md) | Collection boundaries, clustering, feasible search and timing |
-| [API reference](docs/api-design.md), [trip inspection](docs/trip-inspection.md) | Authentication, operations, response fields and rejection examples |
-| [Dispatch](docs/dispatch-workflow.md), [booking lifecycle](docs/booking-lifecycle.md) | Offers, acceptance, execution, cancellation and SLA recovery |
-| [Failure modes](docs/failure-modes.md), [test matrix](docs/test-matrix.md) | Locking, rollback, metrics and what tests establish |
-| [Requirement traceability](docs/requirements-traceability.md) | Each case-study requirement linked to implementation and tests |
-| [Assumptions](docs/assumptions.md), [algorithm analysis](docs/algorithm-analysis.md) | Chosen policies, approximations and costs |
-| [Design decisions](docs/decisions/0005-handle-booking-deduplication.md) | [Deduplication](docs/decisions/0005-handle-booking-deduplication.md), [clustering](docs/decisions/0006-request-clustering.md), [zone caching](docs/decisions/007-zone-caching.md) |
+| `src/main/java/com/ridebatching` | Feature packages: booking, batching, trip, dispatch, driver, auth, zone and supporting policies |
+| `src/main/resources/db/migration` | Forward Flyway schema migrations |
+| `src/main/resources/static` | Browser demo |
+| `src/test` | Unit, database and authenticated HTTP tests |
+| `src/benchmark` | Optional JMH harness; [older measurements](docs/benchmarks/batching.md) are not current performance results |
+| `scripts` | Optional HTTP walkthrough |
+| `docs` | Design, API contracts, setup and evidence |
 
-Source is in `src/main`, tests in `src/test`, and optional JMH source in `src/benchmark`. [Historical benchmark notes](docs/benchmarks/batching.md) predate the current planner and are not current performance claims.
+Start with [architecture](docs/architecture.md) and [domain states](docs/domain-model.md), then [API design](docs/api-design.md), [trip inspection](docs/trip-inspection.md), [dispatch](docs/dispatch-workflow.md) and [booking lifecycle](docs/booking-lifecycle.md). [Assumptions](docs/assumptions.md), [algorithm cost](docs/algorithm-analysis.md) and [requirement traceability](docs/requirements-traceability.md) explain policy choices and their limits. Design records cover [deduplication](docs/decisions/0005-handle-booking-deduplication.md), [clustering](docs/decisions/0006-request-clustering.md) and [zone caching](docs/decisions/007-zone-caching.md).
 
-## Known limitations
+## Limits
 
-- ETA uses straight-line distance, fixed speed/circuity and dwell. Driver approach is checked, but traffic, road networks and actual arrivals are not measured.
-- Greedy grouping and preserved stop order do not find a global optimum. Claim limits and competing workers can fragment clusters; late-insertion/fleet scans and route length remain unbounded.
-- Urgency does not guarantee service under overload or downtime. Persisted SLA issues and exhausted dispatch attempts still need operational remedies; there is no resolution/reassignment API.
-- Driver responses and execution use admin simulation. Offers are provisional; late insertion is restricted to planned trips, cancellation to pre-execution trips.
-- Saved estimates are not live promises. Inspection comparisons check current route constraints, not historical decisions or the source-window/zone/direction prefilter.
-- Zone caching has no cross-instance invalidation. Actuator is public under this assessment policy. Backup/restore and sustained-load guarantees are unverified; inconsistent legacy data may require explicit repair before migration.
+- ETA uses straight-line distance, fixed speed/circuity and dwell. It checks driver approach but does not measure traffic or actual arrivals.
+- Greedy grouping does not find a global optimum. Claims bound returned rows, while database scans, fleet scans, late insertion and total route length can still grow.
+- Driver responses and execution use admin simulation. Reference-data CRUD, delivered notifications and operational reassignment or SLA-resolution APIs are outside this implementation.
+- Zone caching has no cross-instance invalidation. Actuator is public under the assessment configuration. Sustained load, backup/restore and deployment recovery have not been established.
 
-## Further production work
-
-Add authenticated driver execution and measured arrivals, operational SLA remedies and calibrated road ETA. Then validate load, recovery, operational access and cache coherence against an actual deployment. Those are separate steps beyond this case study.
+These are the next steps for an operational service; the current project demonstrates the case-study workflow and its database correctness rules.

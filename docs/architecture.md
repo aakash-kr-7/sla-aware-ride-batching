@@ -72,20 +72,20 @@ sequenceDiagram
     participant S as DispatchService
     participant DB as PostgreSQL
     B->>S: advanceTrip(tripId)
-    S->>DB: Lock trip; inspect offer history
-    S->>S: Exclude attempted/ineligible drivers; rank nearest
+    S->>DB: Lock trip and inspect offer history
+    S->>S: Exclude attempted/ineligible drivers and rank nearest
     S->>DB: Persist initial OFFERED (or no offer)
     S-->>B: Route, activeOfferId, history and outcome
     alt Admin simulates rejection
         B->>S: rejectOffer(activeOfferId)
-        S->>DB: Lock trip and offer; set REJECTED
+        S->>DB: Lock trip and offer, set REJECTED
         S->>DB: Persist next untried driver's offer
     else Offer deadline reached
         B->>S: advanceTrip(tripId)
-        S->>DB: Set EXPIRED; try next driver within attempt limit
+        S->>DB: Set EXPIRED and try next driver within attempt limit
     else Admin simulates acceptance
         B->>S: acceptOffer(activeOfferId)
-        S->>DB: Lock trip, offer and driver; recheck expiry/eligibility and route feasibility with current approach
+        S->>DB: Lock trip, offer and driver, recheck expiry and approach-aware feasibility
         S->>DB: Commit accepted offer and matching trip/driver assignment
     end
 ```

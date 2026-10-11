@@ -12,7 +12,7 @@ import io.swagger.v3.oas.annotations.Operation;
 
 @RestController
 @RequestMapping("/api/admin/batching")
-@Tag(name = "Admin (Batching)", description = "Administrative endpoints for triggering and managing the batching process")
+@Tag(name = "Admin (Batching)", description = "Run a batching cycle on eligible pending requests.")
 public class BatchingAdminController {
 
     private final BatchingService batchingService;

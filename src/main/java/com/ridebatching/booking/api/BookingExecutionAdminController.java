@@ -11,7 +11,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/admin/bookings")
 @PreAuthorize("hasRole('ADMIN')")
-@Tag(name = "Admin (Execution simulation)", description = "Record the next pickup/dropoff for an accepted trip. Admin simulation uses its stored driver assignment; no driver identity or status payload is accepted. Follow the route order shown in dispatch inspection.")
+@Tag(name = "Admin (Execution simulation)", description = "Record pickups and dropoffs in the saved route order for an accepted trip. Admin token required.")
 public class BookingExecutionAdminController {
     private final BookingExecutionService execution;
     public BookingExecutionAdminController(BookingExecutionService execution) { this.execution = execution; }

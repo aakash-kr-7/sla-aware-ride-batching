@@ -27,7 +27,7 @@ import io.swagger.v3.oas.annotations.Parameter;
 
 @RestController
 @RequestMapping("/api/v1/bookings")
-@Tag(name = "Employee (Bookings)", description = "Endpoints for employees to create, list, and cancel their ride bookings")
+@Tag(name = "Employee (Bookings)", description = "Create and inspect bookings, or cancel before trip execution.")
 public class BookingController {
 
     private final BookingService bookingService;

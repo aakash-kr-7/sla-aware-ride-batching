@@ -1,37 +1,17 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="520" viewBox="0 0 1120 520" role="img" aria-labelledby="title desc">
-  <title id="title">Why the local fixture produces four plus one</title>
-  <desc id="desc">Five employees request the same pickup and long common journey. One four-seat trip carries four riders, and another carries one. Taking all five simultaneously fails capacity; returning after a dropoff misses the remaining pickup promise. This is an illustration, not captured API output.</desc>
-  <rect width="1120" height="520" rx="18" fill="#f8fafc"/>
-  <g font-family="Arial, sans-serif">
-    <text x="40" y="48" font-size="24" font-weight="700" fill="#0f172a">Nearby requests are candidates for sharing, not permission to share.</text>
-    <text x="40" y="78" font-size="15" fill="#475569">Five distinct employees · same pickup · long common destination · four planning seats</text>
-    <rect x="40" y="108" width="360" height="176" rx="12" fill="#fff" stroke="#cbd5e1"/>
-    <text x="60" y="142" font-size="18" font-weight="700" fill="#0f172a">Incoming requests</text>
-    <g fill="#dbeafe" stroke="#93c5fd">
-      <circle cx="80" cy="195" r="23"/><circle cx="143" cy="195" r="23"/><circle cx="206" cy="195" r="23"/><circle cx="269" cy="195" r="23"/><circle cx="332" cy="195" r="23"/>
-    </g>
-    <g fill="#1e40af" font-size="16" font-weight="700" text-anchor="middle"><text x="80" y="201">A</text><text x="143" y="201">B</text><text x="206" y="201">C</text><text x="269" y="201">D</text><text x="332" y="201">E</text></g>
-    <text x="60" y="255" font-size="14" fill="#475569">Each pickup deadline = creation + 20 min</text>
-    <path d="M416 195 H463 L455 187 M463 195 L455 203" fill="none" stroke="#64748b" stroke-width="2"/>
-    <rect x="485" y="108" width="345" height="176" rx="12" fill="#ecfdf5" stroke="#a7f3d0"/>
-    <text x="505" y="142" font-size="18" font-weight="700" fill="#065f46">Trip 1: four riders</text>
-    <g fill="#065f46"><rect x="506" y="174" width="56" height="45" rx="7"/><rect x="572" y="174" width="56" height="45" rx="7"/><rect x="638" y="174" width="56" height="45" rx="7"/><rect x="704" y="174" width="56" height="45" rx="7"/></g>
-    <g fill="#fff" font-size="16" font-weight="700" text-anchor="middle"><text x="534" y="202">A</text><text x="600" y="202">B</text><text x="666" y="202">C</text><text x="732" y="202">D</text></g>
-    <text x="505" y="255" font-size="14" fill="#065f46">Peak occupancy 4 · every pickup meets SLA</text>
-    <rect x="855" y="108" width="225" height="176" rx="12" fill="#eff6ff" stroke="#bfdbfe"/>
-    <text x="875" y="142" font-size="18" font-weight="700" fill="#1e40af">Trip 2: one rider</text>
-    <rect x="875" y="174" width="56" height="45" rx="7" fill="#1e40af"/>
-    <text x="903" y="202" text-anchor="middle" font-size="16" font-weight="700" fill="#fff">E</text>
-    <text x="875" y="255" font-size="14" fill="#1e40af">Peak occupancy 1</text>
-    <rect x="40" y="311" width="505" height="126" rx="12" fill="#fff7ed" stroke="#fed7aa"/>
-    <text x="60" y="344" font-size="18" font-weight="700" fill="#9a3412">Alternative: carry everyone at once</text>
-    <text x="60" y="375" font-size="15" fill="#334155">Five simultaneous riders exceed four seats.</text>
-    <text x="60" y="409" font-size="14" font-weight="700" fill="#9a3412">First failure: CAPACITY</text>
-    <rect x="575" y="311" width="505" height="126" rx="12" fill="#fff7ed" stroke="#fed7aa"/>
-    <text x="595" y="344" font-size="18" font-weight="700" fill="#9a3412">Alternative: drop someone, then return</text>
-    <text x="595" y="375" font-size="15" fill="#334155">Seats become free, but the later pickup is too late.</text>
-    <text x="595" y="409" font-size="14" font-weight="700" fill="#9a3412">First failure: PICKUP_SLA</text>
-    <text x="40" y="477" font-size="14" fill="#475569">Illustration of the local fixture. Inspect the API for actual rider IDs, route order and timestamps.</text>
-    <text x="40" y="500" font-size="14" fill="#475569">Four seats bound simultaneous occupancy; short routes with turnover can serve more than four bookings.</text>
-  </g>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="470" viewBox="0 0 760 470" role="img" aria-labelledby="title desc">
+<title id="title">Five riders, two trips</title><desc id="desc">In the long-journey fixture, four riders share a trip and the fifth takes a separate trip. Carrying five at once exceeds four seats. Dropping someone before returning fits the seats but misses a pickup deadline. Illustrative grouping, not captured API data.</desc>
+<rect width="760" height="470" fill="#f5f6f4"/>
+<g font-family="Segoe UI,Arial,sans-serif" fill="#192e2b">
+<text x="28" y="40" font-size="23" font-weight="700">Five riders, two trips</text><text x="28" y="69" font-size="16" fill="#536762">Same pickup and long journey. Four seats. Twenty minutes to pickup.</text>
+<rect x="28" y="96" width="444" height="124" rx="6" fill="#e4eee7" stroke="#b9c9bf"/><rect x="494" y="96" width="238" height="124" rx="6" fill="#fff" stroke="#b9c9bf"/>
+<text x="48" y="126" font-size="18" font-weight="600">Shared trip</text><text x="514" y="126" font-size="18" font-weight="600">Separate trip</text>
+<g fill="#196b55"><rect x="48" y="143" width="84" height="42" rx="4"/><rect x="148" y="143" width="84" height="42" rx="4"/><rect x="248" y="143" width="84" height="42" rx="4"/><rect x="348" y="143" width="84" height="42" rx="4"/><rect x="514" y="143" width="84" height="42" rx="4"/></g>
+<g fill="#fff" text-anchor="middle" font-size="17"><text x="90" y="170">A</text><text x="190" y="170">B</text><text x="290" y="170">C</text><text x="390" y="170">D</text><text x="556" y="170">E</text></g>
+<text x="48" y="208" font-size="15">Peak occupancy: 4</text><text x="514" y="208" font-size="15">Peak occupancy: 1</text>
+<text x="28" y="261" font-size="18" font-weight="600">Why the fifth rider cannot join this route</text>
+<rect x="28" y="279" width="704" height="60" rx="4" fill="#fff" stroke="#b9c9bf"/>
+<text x="48" y="303" font-size="16" font-weight="600">Pick everyone up first</text><text x="48" y="327" font-size="15">Five riders onboard exceeds capacity.</text><text x="580" y="316" font-size="15" fill="#9c581c">CAPACITY</text>
+<rect x="28" y="352" width="704" height="60" rx="4" fill="#fff" stroke="#b9c9bf"/>
+<text x="48" y="376" font-size="16" font-weight="600">Drop someone off, then return</text><text x="48" y="400" font-size="15">A seat is free, but the next pickup is too late.</text><text x="580" y="389" font-size="15" fill="#9c581c">PICKUP_SLA</text>
+<text x="28" y="449" font-size="14" fill="#536762">Illustrative grouping. Short journeys can allow seat turnover and different results.</text>
+</g></svg>

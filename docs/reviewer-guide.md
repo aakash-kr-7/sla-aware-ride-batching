@@ -2,9 +2,9 @@
 
 This project is an SLA-aware ride-pooling backend for employee transit. It groups on-demand ride requests into feasible shared routes within vehicle capacity and SLA constraints, and coordinates driver dispatch through an offer state machine. 
 
-To review the system, you can use the [Interactive Reviewer Console](reviewer-ui.md) at `http://127.0.0.1:8080/`, explore endpoints via [Swagger UI](http://127.0.0.1:8080/swagger-ui/index.html), or run the automated terminal script below. All three paths interact with the live Spring Boot backend.
+Use the [browser demo](reviewer-ui.md) at `http://127.0.0.1:8080/`, explore endpoints via [Swagger UI](http://127.0.0.1:8080/swagger-ui/index.html), or run the automated terminal script below. The browser includes editable scenarios with up to nine riders; the Python path below checks a fixed five-rider example.
 
-Use the [public local setup](local-development.md) from a fresh clone and empty disposable database. For an unattended check run `python scripts/local-review.py`. For a 6–10 minute explanation, run:
+Use the [local setup](local-development.md) from a fresh clone and empty disposable database. For an unattended check run `python scripts/local-review.py`. For a 6–10 minute explanation, run:
 
 ```sh
 python scripts/local-review.py --pause
@@ -53,7 +53,7 @@ Point out five different employee IDs and five different booking IDs. A repeated
 
 The server assigns creation time, collection slot and the 20-minute pickup deadline. This **SLA** is the modelled maximum wait to pickup. It is distinct from the extra in-vehicle time allowed by the detour rules.
 
-**Why it matters:** request validation and database-backed deduplication protect logical identity before the optimization starts. HTTP 201 alone would not establish either property.
+request validation and database-backed deduplication protect logical identity before the optimization starts. HTTP 201 alone would not establish either property.
 
 ## 2. Four-plus-one and route inspection — about two minutes
 
@@ -70,7 +70,7 @@ Point out:
 
 The first pickup is optimistic during unassigned planning. Offering checks a driver's approach; acceptance repeats that check with current time and persists refreshed estimates. These are local estimates, not measured arrival times.
 
-**Why it matters:** the response exposes grouping and constraints. Four seats limit simultaneous occupancy, so a short route with turnover can serve more than four bookings. This fixture deliberately uses a long common journey to make four-plus-one necessary.
+the response exposes grouping and constraints. Four seats limit simultaneous occupancy, so a short route with turnover can serve more than four bookings. This fixture deliberately uses a long common journey to make four-plus-one necessary.
 
 ## 3. Explain a rejected sharing alternative — about one minute
 
@@ -86,7 +86,7 @@ Press Enter. At the second pause, repeat **Inspect one trip** with the shared tr
 
 Rejection counts report each alternative's **first** failed constraint. The SLA example is the closest missed promise among the checked failures. This comparison is a fresh hypothetical check, not stored decision history, and it changes no bookings or routes.
 
-**Why it matters:** nearby endpoints do not make a batch valid. Waiting for a seat can respect capacity and still violate SLA. The planner searches for the cheapest **feasible** insertion, rather than stopping at the cheapest invalid route. A dedicated test also demonstrates an urgent pair splitting despite spare seats; see [planner evidence](planner-and-eta.md#verification) and [inspection evidence](trip-inspection.md#commands-and-evidence).
+nearby endpoints do not make a batch valid. Waiting for a seat can respect capacity and still violate SLA. The planner searches for the cheapest **feasible** insertion, rather than stopping at the cheapest invalid route. A dedicated test also demonstrates an urgent pair splitting despite spare seats; see [planner evidence](planner-and-eta.md#verification) and [inspection evidence](trip-inspection.md#commands-and-evidence).
 
 ## 4. Reject, select another driver, accept — about two minutes
 
@@ -96,7 +96,7 @@ Rejection starts a five-minute **same-trip** cool-off. The dispatch workflow als
 
 Press Enter. At the fourth pause, inspect again: `tripStatus=DISPATCHED`, `assignedDriverId` identifies the backup driver and the matching offer is **ACCEPTED**. Pickup estimates now include the driver's approach and the current acceptance time.
 
-**Why it matters:** a pending offer is not a reservation. Locked acceptance commits offer/trip/driver state together only after the current assignment still fits. A live but infeasible offer fails with 409 rather than committing a broken promise. [Dispatch boundaries and races](dispatch-workflow.md).
+a pending offer is not a reservation. Locked acceptance commits offer/trip/driver state together only after the current assignment still fits. A live but infeasible offer fails with 409 rather than committing a broken promise. [Dispatch boundaries and races](dispatch-workflow.md).
 
 ## 5. Cancellation isolation and metrics — about one minute
 
@@ -106,7 +106,7 @@ Open `target/local-review/08-cancellation-isolation.json` to compare actual befo
 
 Inspect `09-metrics.json` or expand [Actuator metrics](http://127.0.0.1:8080/actuator/metrics). Useful counters here are `bookings.deduplication_hits`, `batching.trips_formed`, `dispatch.rejections`, `dispatch.acceptances` and `bookings.cancellation_replans`. Counters count process activity and are not transaction-aware audit totals. They complement the persisted state assertions.
 
-**Why it matters:** a local mutation should affect only its aggregate. Recomputing every trip would hide an isolation problem. Metrics help observe behaviour, while database state establishes the result.
+a local mutation should affect only its aggregate. Recomputing every trip would hide an isolation problem. Metrics help observe behaviour, while database state establishes the result.
 
 ## What to capture separately
 
@@ -119,4 +119,4 @@ Submit a concise recording or four screenshots alongside the repository link:
 
 Avoid recording tokens. Use your actual responses; the diagrams in these docs are labelled illustrations. Booking/trip UUIDs and timestamps vary on each reset, while the asserted outcomes remain the same. The script waits briefly if necessary to keep the five-request burst within one real UTC collection window.
 
-This short workflow is not the entire test suite. Exact window/zone/direction boundaries, urgent-pair splits, expiry, escalation uniqueness, late insertion and forced concurrency races are covered by [automated tests](test-matrix.md), with [traceability](requirements-traceability.md) to their implementations. Personal recordings and generated response files do not belong in Git history.
+This short workflow is not the entire test suite. Exact window/zone/direction boundaries, urgent-pair splits, expiry, escalation uniqueness, late insertion and forced concurrency races are covered by [automated tests](test-matrix.md), with [traceability](requirements-traceability.md) to their implementations. Keep personal recordings and generated responses outside Git history.

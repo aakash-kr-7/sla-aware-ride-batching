@@ -12,7 +12,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/admin/dispatch")
 @PreAuthorize("hasRole('ADMIN')")
-@Tag(name = "Admin (Dispatch simulation)", description = "Admins inspect trips and simulate the response of the driver stored on an offer. No driver identity or pickup is accepted in a request body. These are case-study simulation controls, not driver authentication or delivered notifications.")
+@Tag(name = "Admin (Dispatch simulation)", description = "Inspect routes and offers, simulate driver responses, and advance dispatch. All operations require an admin token.")
 public class DispatchAdminController {
     private final DispatchService dispatch;
     public DispatchAdminController(DispatchService dispatch) { this.dispatch = dispatch; }
