@@ -4,6 +4,12 @@ A Java backend for employee ride pooling. It groups compatible requests into sha
 
 [Run locally](docs/local-development.md) · [Architecture](docs/architecture.md) · [Requirements and tests](docs/requirements-traceability.md)
 
+## Demo
+
+https://github.com/user-attachments/assets/0cce85bc-3a98-4217-bcd4-885a60b8062e
+
+[Watch on YouTube](https://www.youtube.com/watch?v=TIN9qZ2pdGU)
+
 ## Run and try it
 
 You need JDK 17+ and Docker with Compose. The local profile supplies disposable accounts, pickup zones and drivers; it creates no rides until you send requests.
