@@ -1,6 +1,6 @@
 # Inspect trip results through the API
 
-Trip inspection answers three questions: who shares this route, whether its saved pickup estimates met their deadlines, and why an additional rider might not fit. Use the authenticated admin endpoints below. The [review guide](reviewer-guide.md) supplies a concrete four-plus-one example; [local development](local-development.md) supplies its accounts and reference data.
+Trip inspection answers three questions: who shares this route, whether its saved pickup estimates met their deadlines, and why an additional rider might not fit. Use the authenticated admin endpoints below. [Local development](local-development.md) supplies accounts and reference data for trying them.
 
 ## In Swagger
 

@@ -2,7 +2,7 @@
 
 Swagger UI: `/swagger-ui/index.html`. Generated schema: `/v3/api-docs`.
 
-The API has three surfaces: employee booking operations, authenticated admin planning/dispatch/execution, and public operational endpoints. This reference defines their contracts. For a first run, use the [local fixture setup](local-development.md) and [Swagger review guide](reviewer-guide.md); they supply usable identities and actual request examples.
+The API has three surfaces: employee booking operations, authenticated admin planning/dispatch/execution, and public operational endpoints. This reference defines their contracts. The [local fixture setup](local-development.md) supplies accounts and reference data for trying these operations in the request console or Swagger UI.
 
 ## Authentication and access
 

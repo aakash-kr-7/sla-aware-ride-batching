@@ -20,7 +20,7 @@ Focused command, from the root (on Windows substitute `.\mvnw.cmd`):
 ./mvnw -Dtest=WindowedBatchingIntegrationTest,ConcurrentBatchingIntegrationTest,FeasibleInsertionRegressionTest,AssignmentTimingHttpIntegrationTest,DispatchWorkflowHttpIntegrationTest test
 ```
 
-The [public review script](../scripts/local-review.py) is a separate real-HTTP smoke scenario against the running local fixture profile. It captures useful evidence; it does not replace forced-race or exact-boundary tests.
+The [local request console](local-development.md#using-the-request-console) uses the same HTTP endpoints for manual inspection. The automated suite below covers forced races and exact boundaries.
 
 ## Invariant evidence
 

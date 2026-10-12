@@ -6,7 +6,7 @@
 <g font-family="Segoe UI,Arial,sans-serif" fill="#192e2b">
 <text x="28" y="40" font-size="23" font-weight="700">From request to shared trip</text>
 <rect x="28" y="65" width="704" height="60" rx="6" fill="#fff" stroke="#b9c9bf"/>
-<text x="48" y="91" font-size="18" font-weight="600">Browser demo / Swagger / HTTP client</text>
+<text x="48" y="91" font-size="18" font-weight="600">Request console / Swagger / HTTP client</text>
 <text x="48" y="114" font-size="15" fill="#536762">JSON requests with JWT authentication and employee ownership checks</text>
 <path d="M380 126V158" stroke="#536762" stroke-width="2" marker-end="url(#arrow)"/>
 <rect x="28" y="164" width="704" height="200" rx="6" fill="#fff" stroke="#b9c9bf"/>

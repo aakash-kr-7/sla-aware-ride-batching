@@ -2,7 +2,7 @@
 
 `CONFIRMED` means a booking has a feasible planned route and persisted trip association. Driver acceptance is a separate event: it changes the trip from `PLANNED` to `DISPATCHED`. A confirmed booking can therefore still be waiting for a driver.
 
-This distinction keeps request progress, route planning and actual assignment understandable. The [API reference](api-design.md) lists operations; the [review guide](reviewer-guide.md#5-cancellation-isolation-and-metrics--about-one-minute) shows pre-execution cancellation and isolation with real responses.
+This distinction keeps request progress, route planning and actual assignment understandable. The [API reference](api-design.md) lists operations; the tests in [Evidence](#evidence) verify pre-execution cancellation and isolation through HTTP.
 
 ```mermaid
 flowchart LR

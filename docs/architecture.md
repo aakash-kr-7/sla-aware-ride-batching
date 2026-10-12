@@ -2,7 +2,7 @@
 
 One Spring Boot process serves HTTP requests and runs planning against PostgreSQL. Feature packages organize code, but services share repositories and entities; they are not independently enforced modules. There is no message broker or external routing service.
 
-For a first code review, follow `BookingService` → `BatchingService` → `BatchPlanner` → `DispatchService`. The diagrams below show where each operation acquires durable state. To exercise those paths first, use the [local setup](local-development.md) and [review guide](reviewer-guide.md).
+Follow `BookingService` → `BatchingService` → `BatchPlanner` → `DispatchService` to trace a request through the application. The diagrams below show where each operation acquires durable state. The [local setup](local-development.md) provides accounts and reference data for exercising these paths.
 
 ```mermaid
 flowchart LR

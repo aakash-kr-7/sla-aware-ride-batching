@@ -2,7 +2,7 @@
 
 A Java backend for employee ride pooling. It groups compatible requests into shared trips, checks seat capacity, pickup deadlines and detour limits, then coordinates driver offers and assignment.
 
-[Run locally](docs/local-development.md) · [Browser demo](docs/reviewer-ui.md) · [Requirements and tests](docs/requirements-traceability.md)
+[Run locally](docs/local-development.md) · [Architecture](docs/architecture.md) · [Requirements and tests](docs/requirements-traceability.md)
 
 ## Run and try it
 
@@ -23,15 +23,13 @@ Keep the application running in a terminal:
 
 Linux/macOS: `./mvnw spring-boot:run -Dspring-boot.run.profiles=local-fixtures`.
 
-Open the [browser demo](http://127.0.0.1:8080/), select **Use local credentials**, then **Connect**.
+Open the [request console](http://127.0.0.1:8080/), select **Use local credentials**, then **Connect**.
 
 - **Guided example:** five riders, duplicate handling, invalid pickup, a four-plus-one split, driver rejection and acceptance, then cancellation of one rider.
 - **Your scenario:** edit up to nine journeys and send requests together. Run batching, inspect the routes, accept or reject offers, and record pickups/dropoffs from each trip. On a fresh database the default long journey normally produces **4 + 4 + 1**. Different inputs can produce different outcomes.
-- **[Swagger UI](http://127.0.0.1:8080/swagger-ui/index.html):** all endpoints, schemas and error contracts. Its authorization is separate from the browser demo.
+- **[Swagger UI](http://127.0.0.1:8080/swagger-ui/index.html):** all endpoints, schemas and error contracts. Its authorization is separate from the request console.
 
 The fixture fleet starts with two four-seat drivers and one two-seat driver available, plus one offline driver. An offer does not reserve a driver: competing trips can initially offer the same cab, and acceptance checks its current availability under locks. There is no driver app; response and execution controls are authenticated admin simulations.
-
-[Captured nine-rider run](docs/assets/nine-rider-demo.png): three dispatched trips assigned to three different cabs, before cancellation or execution.
 
 For a repeatable run, use a fresh local database. [Setup, accounts, policy differences and reset commands](docs/local-development.md).
 
@@ -63,7 +61,7 @@ A losing duplicate insert returns the existing booking. Batching workers claim s
 
 Java 17 is the compilation target; CI uses Java 21. Maven Wrapper pins the build tool. The browser uses plain HTML, CSS and JavaScript served by Spring Boot, with no separate frontend build.
 
-## Tests and repeatable walkthrough
+## Tests
 
 ```powershell
 .\mvnw.cmd --batch-mode clean verify
@@ -73,24 +71,15 @@ Linux/macOS: `./mvnw --batch-mode clean verify`. Docker must be running. Tests c
 
 The suite covers normal requests, boundary inputs, rollback and competing operations, including duplicate creation, overlapping batch workers, late insertion, driver acceptance and cancellation races. [Test matrix](docs/test-matrix.md).
 
-An optional Python 3.10+ walkthrough sends HTTP requests and checks the five-rider scenario:
-
-```sh
-python scripts/local-review.py
-```
-
-Use `--pause` for inspection points during a presentation. Responses are written to ignored `target/local-review/`; passwords and tokens are not saved. Choose this path or the browser example on a fresh database. [Walkthrough and explanation guide](docs/reviewer-guide.md).
-
 ## Repository guide
 
 | Location | Contents |
 | --- | --- |
 | `src/main/java/com/ridebatching` | Feature packages: booking, batching, trip, dispatch, driver, auth, zone and supporting policies |
 | `src/main/resources/db/migration` | Forward Flyway schema migrations |
-| `src/main/resources/static` | Browser demo |
+| `src/main/resources/static` | Request console |
 | `src/test` | Unit, database and authenticated HTTP tests |
 | `src/benchmark` | Optional JMH harness; [older measurements](docs/benchmarks/batching.md) are not current performance results |
-| `scripts` | Optional HTTP walkthrough |
 | `docs` | Design, API contracts, setup and evidence |
 
 Start with [architecture](docs/architecture.md) and [domain states](docs/domain-model.md), then [API design](docs/api-design.md), [trip inspection](docs/trip-inspection.md), [dispatch](docs/dispatch-workflow.md) and [booking lifecycle](docs/booking-lifecycle.md). [Assumptions](docs/assumptions.md), [algorithm cost](docs/algorithm-analysis.md) and [requirement traceability](docs/requirements-traceability.md) explain policy choices and their limits. Design records cover [deduplication](docs/decisions/0005-handle-booking-deduplication.md), [clustering](docs/decisions/0006-request-clustering.md) and [zone caching](docs/decisions/007-zone-caching.md).

@@ -2,7 +2,7 @@
 
 Every newly planned trip attempts an initial driver offer in the same transaction as its route and booking confirmations. Rejection advances to another eligible driver; acceptance commits the offer, trip assignment and driver's active-trip link atomically. All steps run inside the existing application.
 
-The [public review workflow](reviewer-guide.md#4-reject-select-another-driver-accept--about-two-minutes) exercises this through authenticated HTTP. This document defines identity, deadlines, finite retries and outcomes when the happy path stops.
+The [local request console](local-development.md#using-the-request-console) exercises this through authenticated HTTP. This document defines identity, deadlines, finite retries and outcomes when no driver can be assigned.
 
 ```mermaid
 flowchart TD

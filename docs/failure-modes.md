@@ -1,6 +1,6 @@
 # Concurrency, failure and recovery
 
-The design keeps logical identity and assignment correctness in PostgreSQL. This guide explains the locks and constraints, what commits when an operation fails, and what an operator can inspect next. The [public review](reviewer-guide.md) shows state isolation; the integration tests below exercise contention deliberately.
+The design keeps logical identity and assignment correctness in PostgreSQL. This guide explains the locks and constraints, what commits when an operation fails, and what an operator can inspect next. The integration tests below exercise contention and verify isolation between unrelated trips.
 
 ## Transaction ownership
 

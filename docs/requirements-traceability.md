@@ -6,9 +6,9 @@ Verified against the supplied MoveInSync Backend Case Study 2026, Case Study 7: 
 
 Employees submit ad-hoc pickup/dropoff requests. Sharing should reduce unnecessary cabs without trading away pickup promises, seat limits or rider detours. Nearby pickup and direction are grouping hints; feasibility takes precedence. Drivers must be eligible, and one cancellation must not reshuffle unrelated trips. The source's 15-minute window, 20-minute SLA and four-seater example are illustrative; [assumptions](assumptions.md) records the chosen runtime policies.
 
-**Implemented** means the stated scope has code and behavioural evidence. **Partial** identifies missing integration, execution handling or validation. Neither label claims actual road-arrival guarantees. Tests below link directly to source; T IDs connect to the more detailed [test matrix](test-matrix.md). The source also requires a short video or screenshots with sample API calls. A [captured nine-rider browser run](assets/nine-rider-demo.png) is included; the [recording guide](reviewer-guide.md#what-to-capture-separately) identifies the additional constraint, fallback and cancellation views to capture for submission.
+**Implemented** means the stated scope has code and behavioural evidence. **Partial** identifies missing integration, execution handling or validation. Neither label claims actual road-arrival guarantees. Tests below link directly to source; T IDs connect to the more detailed [test matrix](test-matrix.md).
 
-For a fast review, run the [fresh-clone workflow](local-development.md), then use the tables to find the corresponding code and tests. The [recording guide](reviewer-guide.md#what-to-capture-separately) identifies useful actual responses to submit separately.
+Run the [local setup](local-development.md), then use the tables to find the corresponding code and tests.
 
 ## Core requirements
 
@@ -28,19 +28,9 @@ For a fast review, run the [fresh-clone workflow](local-development.md), then us
 
 Authenticated [trip inspection](trip-inspection.md) makes R03/R04/R05/R06/R08 results inspectable: status/driver association, grouped IDs, ordered stops, current planning capacity/peak occupancy, stored pickup estimates/deadlines and optional hypothetical rejection reasons. Implementation: [DispatchView](../src/main/java/com/ridebatching/dispatch/DispatchView.java), [DispatchService][dispatch], [TripInsertionInspector](../src/main/java/com/ridebatching/dispatch/TripInsertionInspector.java). Behavioural evidence: [TripInspectionHttpIntegrationTest](../src/test/java/com/ridebatching/dispatch/api/TripInspectionHttpIntegrationTest.java). The comparison reuses the evaluator and checks current route constraints; it does not reconstruct historical grouping decisions or apply window/zone/direction gates. [Reproduction](trip-inspection.md#commands-and-evidence).
 
-## Public reproduction paths
+## Local verification
 
-`python scripts/local-review.py` runs the normal HTTP entry points against explicit local reference fixtures. It stores real responses under ignored `target/local-review/` and checks the following outcomes. The fixture profile releases fresh requests immediately; it does not weaken capacity, SLA, detour, ownership or acceptance checks.
-
-| Requirement | Captured evidence / explanation |
-| --- | --- |
-| R01 Pickup admission, R02 logical identity | `03-input-contracts.json`: useful 422 zone error, duplicate returns the same ID, employee list still contains one booking |
-| R03 Capacity, R04 estimated SLA | `04-four-plus-one.json`: two routes, occupancy four/one, every saved pickup meets its deadline. `05-sharing-reasons.json`: all 45 alternative insertions fail capacity or SLA checks |
-| R06 Eligibility, R07 rejection/cool-off | `06-next-driver.json`: nearest four-seat driver REJECTED, eligible backup OFFERED. `07-accepted.json`: matching accepted assignment and approach-aware estimates |
-| R08 Cancellation isolation | `08-cancellation-isolation.json`: affected route becomes three riders/six stops; unrelated response is identical |
-| P01 Authentication, P06 monitoring | Script logs in through real JWT authentication as employee/admin; `01-health.json` and `09-metrics.json` capture health and selected process counters |
-
-The script does not separately demonstrate every detour, source-window/zone/direction boundary, escalation, late insertion, execution or expiry case. Those have focused test commands in the linked policy documents and [test matrix](test-matrix.md). The sharing comparison is current-time hypothetical evidence, not a stored explanation of the original grouping decision. The temporary same-trip cool-off and stronger permanent no-repeat rule are distinguished in [dispatch policy](dispatch-workflow.md#policies-and-outcomes).
+The [request console](local-development.md#using-the-request-console) calls the authenticated booking, planning, dispatch and execution APIs. The fixture profile makes fresh requests eligible immediately; it preserves capacity, SLA, detour, ownership and acceptance checks. Automated evidence for concurrency, boundaries and rollback is linked in the tables above and the [test matrix](test-matrix.md).
 
 Local setup itself is implemented by [LocalFixtures](../src/main/java/com/ridebatching/dev/LocalFixtures.java), [profile configuration](../src/main/resources/application-local-fixtures.yml) and [isolated Compose](../compose.local.yml). [Integration](../src/test/java/com/ridebatching/dev/LocalFixturesIntegrationTest.java) and [isolation](../src/test/java/com/ridebatching/dev/LocalFixturesIsolationTest.java) tests cover its safe loading boundaries. [Exact fresh-clone commands](local-development.md#a-fresh-clone-with-usable-accounts) require no ignored personal files or SQL editing.
 

@@ -2,7 +2,7 @@
 
 Status: Implemented for active bookings created through `BookingService`.
 
-The decision answers a concrete race: two callers can submit the same journey before either sees the other's write. [API identity](../api-design.md#booking-routes), [concurrency evidence](../failure-modes.md#transaction-ownership) and [the public duplicate check](../reviewer-guide.md#1-valid-requests-and-input-contracts--about-one-minute) show the resulting contract.
+The decision answers a concrete race: two callers can submit the same journey before either sees the other's write. [API identity](../api-design.md#booking-routes) defines the resulting contract; [concurrency evidence](../failure-modes.md#transaction-ownership) covers competing submissions.
 
 ## Decision and rationale
 
